@@ -9,19 +9,22 @@
 		},
 		"roo": {
 			"description": "开始使用的最佳免费模型",
-			"incentive": "免费尝试 Roo"
+			"incentive": "免费试用"
 		}
 	},
 	"landing": {
-		"greeting": "欢迎使用 NJUST_AI_CJ！",
-		"introduction": "一个强大的 AI 编程助手。请在下方配置你的 LLM 提供商以开始使用。",
+		"greeting": "NJUST AI 仓颉开发助手",
+		"introduction": "智能仓颉语言开发伴侣——由 AI 驱动，为仓颉全工具链而生。",
+		"featureLsp": "LSP 自动补全、跳转定义、实时诊断",
+		"featureToolchain": "集成 cjpm 构建、cjfmt 格式化、cjlint 检查",
+		"featureAi": "AI 辅助编码、错误修复、代码审查",
 		"accountMention": "",
-		"getStarted": "配置提供商",
+		"getStarted": "配置 AI 提供商",
 		"noAccount": ""
 	},
 	"providerSignup": {
-		"heading": "配置你的提供商",
-		"chooseProviderLocal": "选择以下 AI 提供商以继续",
+		"heading": "配置 AI 提供商",
+		"chooseProviderLocal": "选择一个 AI 提供商来驱动仓颉开发助手",
 		"useAnotherProvider": "使用其他提供商",
 		"useAnotherProviderDescription": "使用你自己的 API 密钥或其他提供商",
 		"finish": "完成",
@@ -30,12 +33,12 @@
 	},
 	"waitingForCloud": {
 		"heading": "登录到 NJUST_AI_CJ Cloud...",
-		"description": "我们将带你前往浏览器注册 NJUST_AI_CJ Cloud。然后我们会把你带回这里以完成设置。",
+		"description": "我们将带你前往浏览器注册。然后我们会把你带回这里以完成设置。",
 		"noPrompt": "如果没有提示你打开 URL，<clickHere>点击这里</clickHere>。",
 		"havingTrouble": "如果你已完成注册但遇到问题，<clickHere>点击这里</clickHere>。",
 		"pasteUrl": "粘贴浏览器中显示的回调 URL：",
 		"docsLink": "无法正常工作？<DocsLink>查看文档</DocsLink>。",
-		"invalidURL": "这不像是有效的回调 URL。请复制 NJUST_AI_CJ Cloud 在你的浏览器中显示的内容。",
+		"invalidURL": "这不像是有效的回调 URL。请复制浏览器中显示的内容。",
 		"goBack": "返回"
 	},
 	"startRouter": "我们建议使用 LLM 路由器：",

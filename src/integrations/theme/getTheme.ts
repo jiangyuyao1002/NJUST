@@ -73,6 +73,10 @@ export async function getTheme() {
 			parsed = mergeJson(parsed, includeTheme)
 		}
 
+		if (!parsed || (!parsed.tokenColors && !parsed.colors && !parsed.settings)) {
+			return undefined
+		}
+
 		const converted = convertTheme(parsed)
 
 		converted.base = (
@@ -85,7 +89,7 @@ export async function getTheme() {
 
 		return converted
 	} catch (e) {
-		console.log("Error loading color theme: ", e)
+		// Theme loading can fail for non-standard themes; this is non-fatal.
 	}
 	return undefined
 }

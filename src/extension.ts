@@ -25,13 +25,16 @@ import { createOutputChannelLogger } from "./utils/outputChannelLogger"
 import { initializeNetworkProxy } from "./utils/networkProxy"
 
 import { Package } from "./shared/package"
-import { formatLanguage } from "./shared/language"
 import { ContextProxy } from "./core/config/ContextProxy"
 import { ClineProvider } from "./core/webview/ClineProvider"
 import { DIFF_VIEW_URI_SCHEME } from "./integrations/editor/DiffViewProvider"
 import { TerminalRegistry } from "./integrations/terminal/TerminalRegistry"
 import { McpServerManager } from "./services/mcp/McpServerManager"
 import { CodeIndexManager } from "./services/code-index/manager"
+import { CangjieLspClient } from "./services/cangjie-lsp/CangjieLspClient"
+import { CjfmtFormatter } from "./services/cangjie-lsp/CjfmtFormatter"
+import { CjlintDiagnostics } from "./services/cangjie-lsp/CjlintDiagnostics"
+import { CjpmTaskProvider } from "./services/cangjie-lsp/CjpmTaskProvider"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./utils/autoImportSettings"
 import { API } from "./extension/api"
@@ -56,6 +59,10 @@ import { ChatParticipantHandler, registerLMTools, ChatStateSync } from "./chat"
 
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
+let cangjieLspClient: CangjieLspClient | undefined
+let cjfmtFormatter: CjfmtFormatter | undefined
+let cjlintDiagnostics: CjlintDiagnostics | undefined
+let cjpmTaskProvider: CjpmTaskProvider | undefined
 
 /**
  * Check if we should auto-open the NJUST_AI_CJ sidebar after switching to a worktree.
@@ -126,7 +133,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	await migrateSettings(context, outputChannel)
 
 	// Initialize i18n for internationalization support.
-	initializeI18n(context.globalState.get("language") ?? formatLanguage(vscode.env.language))
+	initializeI18n(context.globalState.get("language") ?? "en")
 
 	// Initialize terminal shell execution handlers.
 	TerminalRegistry.initialize()
@@ -163,6 +170,24 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 		}
 	}
+
+	// Initialize and start the Cangjie Language Server client.
+	cangjieLspClient = new CangjieLspClient(outputChannel)
+	context.subscriptions.push({ dispose: () => cangjieLspClient?.dispose() })
+	void cangjieLspClient.start().catch((error) => {
+		const message = error instanceof Error ? error.message : String(error)
+		outputChannel.appendLine(`[CangjieLSP] Error during startup: ${message}`)
+	})
+
+	// Initialize Cangjie toolchain integrations.
+	cjfmtFormatter = new CjfmtFormatter(outputChannel)
+	context.subscriptions.push(cjfmtFormatter)
+
+	cjlintDiagnostics = new CjlintDiagnostics(outputChannel)
+	context.subscriptions.push(cjlintDiagnostics)
+
+	cjpmTaskProvider = new CjpmTaskProvider(outputChannel)
+	context.subscriptions.push(cjpmTaskProvider)
 
 	// Initialize the provider.
 	const provider = new ClineProvider(context, outputChannel, "sidebar", contextProxy)
@@ -303,6 +328,18 @@ export async function activate(context: vscode.ExtensionContext) {
 // This method is called when your extension is deactivated.
 export async function deactivate() {
 	outputChannel.appendLine(`${Package.name} extension deactivated`)
+
+	if (cangjieLspClient) {
+		await cangjieLspClient.stop()
+		cangjieLspClient = undefined
+	}
+
+	cjfmtFormatter?.dispose()
+	cjfmtFormatter = undefined
+	cjlintDiagnostics?.dispose()
+	cjlintDiagnostics = undefined
+	cjpmTaskProvider?.dispose()
+	cjpmTaskProvider = undefined
 
 	await McpServerManager.cleanup(extensionContext)
 	TerminalRegistry.cleanup()

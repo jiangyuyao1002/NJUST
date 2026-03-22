@@ -4,7 +4,6 @@ import { type ModeConfig, type PromptComponent, type CustomModePrompts, type Tod
 
 import { Mode, modes, defaultModeSlug, getModeBySlug, getGroupName, getModeSelection } from "../../shared/modes"
 import { DiffStrategy } from "../../shared/tools"
-import { formatLanguage } from "../../shared/language"
 import { isEmpty } from "../../utils/object"
 
 import { McpHub } from "../../services/mcp/McpHub"
@@ -24,6 +23,7 @@ import {
 	markdownFormattingSection,
 	getSkillsSection,
 } from "./sections"
+import { getCangjieContextSection } from "./sections/cangjie-context"
 
 // Helper function to get prompt component, filtering out empty objects
 export function getPromptComponent(
@@ -79,6 +79,8 @@ async function generatePrompt(
 		getSkillsSection(skillsManager, mode as string),
 	])
 
+	const cangjieContextSection = getCangjieContextSection(cwd, mode as string)
+
 	// Tools catalog is not included in the system prompt.
 	const toolsCatalog = ""
 
@@ -93,7 +95,7 @@ ${getSharedToolUseSection()}${toolsCatalog}
 ${getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined)}
 
 ${modesSection}
-${skillsSection ? `\n${skillsSection}` : ""}
+${skillsSection ? `\n${skillsSection}` : ""}${cangjieContextSection ? `\n${cangjieContextSection}` : ""}
 ${getRulesSection(cwd, settings)}
 
 ${getSystemInfoSection(cwd)}
@@ -101,7 +103,7 @@ ${getSystemInfoSection(cwd)}
 ${getObjectiveSection()}
 
 ${await addCustomInstructions(baseInstructions, globalCustomInstructions || "", cwd, mode, {
-	language: language ?? formatLanguage(vscode.env.language),
+	language: language ?? "en",
 	rooIgnoreInstructions,
 	settings,
 })}`

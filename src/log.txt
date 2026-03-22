@@ -1,0 +1,2 @@
+2026-03-22 15:46:34 1774165594224:[Info][Thread 1] LSP Starting over stdin/stdout 
+

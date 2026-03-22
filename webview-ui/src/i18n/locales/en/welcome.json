@@ -9,19 +9,22 @@
 		},
 		"roo": {
 			"description": "The best free models to get started",
-			"incentive": "Try Roo out for free"
+			"incentive": "Try it for free"
 		}
 	},
 	"landing": {
-		"greeting": "Welcome to NJUST_AI_CJ!",
-		"introduction": "A powerful AI-powered coding assistant for your editor. Configure your LLM provider below to get started.",
+		"greeting": "NJUST AI Cangjie Assistant",
+		"introduction": "Your intelligent Cangjie language development companion — powered by AI, built for the full Cangjie toolchain.",
+		"featureLsp": "LSP auto-completion, go-to-definition, diagnostics",
+		"featureToolchain": "Integrated cjpm build, cjfmt format, cjlint check",
+		"featureAi": "AI-assisted coding, error fixing, and code review",
 		"accountMention": "",
-		"getStarted": "Configure Provider",
+		"getStarted": "Configure AI Provider",
 		"noAccount": ""
 	},
 	"providerSignup": {
-		"heading": "Configure your provider",
-		"chooseProviderLocal": "Choose an AI provider to continue",
+		"heading": "Configure your AI provider",
+		"chooseProviderLocal": "Choose an AI provider to power the Cangjie assistant",
 		"useAnotherProvider": "Use another provider",
 		"useAnotherProviderDescription": "Use your own API key or another provider",
 		"finish": "Finish",
@@ -30,12 +33,12 @@
 	},
 	"waitingForCloud": {
 		"heading": "Logging into NJUST_AI_CJ Cloud...",
-		"description": "We'll take you to your browser to sign up for NJUST_AI_CJ Cloud. We'll then bring you back here to finish.",
+		"description": "We'll take you to your browser to sign up. We'll then bring you back here to finish.",
 		"noPrompt": "If you don't get prompted to open a URL, <clickHere>click here</clickHere>.",
 		"havingTrouble": "If you've completed sign up but are having trouble, <clickHere>click here</clickHere>.",
 		"pasteUrl": "Paste the callback URL shown in your browser:",
 		"docsLink": "Not working? <DocsLink>Check the docs</DocsLink>.",
-		"invalidURL": "That doesn't look like a valid callback URL. Please copy what NJUST_AI_CJ Cloud is showing in your browser.",
+		"invalidURL": "That doesn't look like a valid callback URL. Please copy what is shown in your browser.",
 		"goBack": "Go back"
 	},
 	"startRouter": "We recommend using an LLM Router:",

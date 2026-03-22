@@ -1,0 +1,470 @@
+{
+	"Main Function": {
+		"prefix": "main",
+		"body": [
+			"main(): Int64 {",
+			"\t${0:println(\"Hello, Cangjie!\")}",
+			"\treturn 0",
+			"}"
+		],
+		"description": "Main entry point"
+	},
+	"Main Simple": {
+		"prefix": "mainsimple",
+		"body": [
+			"main() {",
+			"\t${0}",
+			"}"
+		],
+		"description": "Main entry point (Unit return)"
+	},
+	"Package Declaration": {
+		"prefix": "package",
+		"body": "package ${1:my_app}",
+		"description": "Package declaration"
+	},
+	"Import": {
+		"prefix": "import",
+		"body": "import ${1:std}.${2:console}.*",
+		"description": "Import statement"
+	},
+	"Function": {
+		"prefix": "func",
+		"body": [
+			"func ${1:name}(${2:param}: ${3:Int64}): ${4:Unit} {",
+			"\t${0}",
+			"}"
+		],
+		"description": "Function declaration"
+	},
+	"Public Function": {
+		"prefix": "pfunc",
+		"body": [
+			"public func ${1:name}(${2:param}: ${3:Int64}): ${4:Unit} {",
+			"\t${0}",
+			"}"
+		],
+		"description": "Public function declaration"
+	},
+	"Generic Function": {
+		"prefix": "gfunc",
+		"body": [
+			"func ${1:name}<${2:T}>(${3:a}: ${2:T}): ${2:T} {",
+			"\t${0:return ${3:a}}",
+			"}"
+		],
+		"description": "Generic function declaration"
+	},
+	"Class": {
+		"prefix": "class",
+		"body": [
+			"class ${1:ClassName} {",
+			"\tlet ${2:field}: ${3:Int64}",
+			"",
+			"\tpublic init(${2:field}: ${3:Int64}) {",
+			"\t\tthis.${2:field} = ${2:field}",
+			"\t}",
+			"",
+			"\t${0}",
+			"}"
+		],
+		"description": "Class with constructor"
+	},
+	"Open Class": {
+		"prefix": "oclass",
+		"body": [
+			"open class ${1:ClassName} {",
+			"\tlet ${2:field}: ${3:Int64}",
+			"",
+			"\tpublic init(${2:field}: ${3:Int64}) {",
+			"\t\tthis.${2:field} = ${2:field}",
+			"\t}",
+			"",
+			"\tpublic open func ${4:method}(): ${5:Unit} {",
+			"\t\t${0}",
+			"\t}",
+			"}"
+		],
+		"description": "Open class (inheritable)"
+	},
+	"Abstract Class": {
+		"prefix": "aclass",
+		"body": [
+			"abstract class ${1:ClassName} {",
+			"\tpublic func ${2:method}(): ${3:Unit}",
+			"\t${0}",
+			"}"
+		],
+		"description": "Abstract class"
+	},
+	"Struct": {
+		"prefix": "struct",
+		"body": [
+			"struct ${1:StructName} {",
+			"\tlet ${2:field}: ${3:Int64}",
+			"",
+			"\tpublic init(${2:field}: ${3:Int64}) {",
+			"\t\tthis.${2:field} = ${2:field}",
+			"\t}",
+			"",
+			"\t${0}",
+			"}"
+		],
+		"description": "Struct with constructor"
+	},
+	"Interface": {
+		"prefix": "interface",
+		"body": [
+			"interface ${1:IName} {",
+			"\tfunc ${2:method}(): ${3:Unit}",
+			"\t${0}",
+			"}"
+		],
+		"description": "Interface declaration"
+	},
+	"Implement Interface": {
+		"prefix": "impl",
+		"body": [
+			"class ${1:ClassName} <: ${2:IName} {",
+			"\tpublic func ${3:method}(): ${4:Unit} {",
+			"\t\t${0}",
+			"\t}",
+			"}"
+		],
+		"description": "Class implementing interface"
+	},
+	"Enum": {
+		"prefix": "enum",
+		"body": [
+			"enum ${1:EnumName} {",
+			"\t| ${2:VariantA}",
+			"\t| ${3:VariantB}",
+			"\t${0}",
+			"}"
+		],
+		"description": "Enum declaration"
+	},
+	"Enum with Data": {
+		"prefix": "enumdata",
+		"body": [
+			"enum ${1:EnumName} {",
+			"\t| ${2:VariantA}(${3:Int64})",
+			"\t| ${4:VariantB}(${5:String})",
+			"\t${0}",
+			"}"
+		],
+		"description": "Enum with associated data"
+	},
+	"Extend": {
+		"prefix": "extend",
+		"body": [
+			"extend ${1:TypeName} {",
+			"\tpublic func ${2:method}(): ${3:Unit} {",
+			"\t\t${0}",
+			"\t}",
+			"}"
+		],
+		"description": "Type extension"
+	},
+	"Extend with Interface": {
+		"prefix": "extendi",
+		"body": [
+			"extend ${1:TypeName} <: ${2:IName} {",
+			"\tpublic func ${3:method}(): ${4:Unit} {",
+			"\t\t${0}",
+			"\t}",
+			"}"
+		],
+		"description": "Type extension implementing interface"
+	},
+	"Property (get)": {
+		"prefix": "prop",
+		"body": [
+			"public prop ${1:name}: ${2:Int64} {",
+			"\tget() { ${0} }",
+			"}"
+		],
+		"description": "Read-only property"
+	},
+	"Property (get/set)": {
+		"prefix": "propmut",
+		"body": [
+			"public mut prop ${1:name}: ${2:Int64} {",
+			"\tget() { ${3} }",
+			"\tset(value) { ${0} }",
+			"}"
+		],
+		"description": "Mutable property with getter and setter"
+	},
+	"Let Variable": {
+		"prefix": "let",
+		"body": "let ${1:name}: ${2:Int64} = ${0}",
+		"description": "Immutable variable"
+	},
+	"Var Variable": {
+		"prefix": "var",
+		"body": "var ${1:name}: ${2:Int64} = ${0}",
+		"description": "Mutable variable"
+	},
+	"If": {
+		"prefix": "if",
+		"body": [
+			"if (${1:condition}) {",
+			"\t${0}",
+			"}"
+		],
+		"description": "If statement"
+	},
+	"If-Else": {
+		"prefix": "ifelse",
+		"body": [
+			"if (${1:condition}) {",
+			"\t${2}",
+			"} else {",
+			"\t${0}",
+			"}"
+		],
+		"description": "If-else statement"
+	},
+	"For-In Loop": {
+		"prefix": "for",
+		"body": [
+			"for (${1:i} in ${2:0..10}) {",
+			"\t${0}",
+			"}"
+		],
+		"description": "For-in loop with range"
+	},
+	"For-In Inclusive": {
+		"prefix": "forinc",
+		"body": [
+			"for (${1:i} in ${2:0}..=${3:10}) {",
+			"\t${0}",
+			"}"
+		],
+		"description": "For-in loop with inclusive range"
+	},
+	"While Loop": {
+		"prefix": "while",
+		"body": [
+			"while (${1:condition}) {",
+			"\t${0}",
+			"}"
+		],
+		"description": "While loop"
+	},
+	"Match": {
+		"prefix": "match",
+		"body": [
+			"match (${1:value}) {",
+			"\tcase ${2:pattern1} => ${3}",
+			"\tcase ${4:pattern2} => ${5}",
+			"\tcase _ => ${0}",
+			"}"
+		],
+		"description": "Pattern matching"
+	},
+	"Match with Where": {
+		"prefix": "matchw",
+		"body": [
+			"match (${1:value}) {",
+			"\tcase ${2:n} where ${3:n > 0} => ${4}",
+			"\tcase _ => ${0}",
+			"}"
+		],
+		"description": "Pattern matching with where clause"
+	},
+	"Try-Catch": {
+		"prefix": "try",
+		"body": [
+			"try {",
+			"\t${1}",
+			"} catch (e: ${2:Exception}) {",
+			"\t${0:println(e.message)}",
+			"}"
+		],
+		"description": "Try-catch block"
+	},
+	"Try-Catch-Finally": {
+		"prefix": "tryf",
+		"body": [
+			"try {",
+			"\t${1}",
+			"} catch (e: ${2:Exception}) {",
+			"\t${3:println(e.message)}",
+			"} finally {",
+			"\t${0}",
+			"}"
+		],
+		"description": "Try-catch-finally block"
+	},
+	"Spawn": {
+		"prefix": "spawn",
+		"body": [
+			"spawn { =>",
+			"\t${0}",
+			"}"
+		],
+		"description": "Spawn a new thread"
+	},
+	"Spawn with Result": {
+		"prefix": "spawnr",
+		"body": [
+			"let ${1:future} = spawn {",
+			"\t${2}",
+			"}",
+			"let ${3:result} = ${1:future}.get()"
+		],
+		"description": "Spawn thread and get result"
+	},
+	"Lambda": {
+		"prefix": "lambda",
+		"body": "{ ${1:a}: ${2:Int64}, ${3:b}: ${4:Int64} => ${0} }",
+		"description": "Lambda expression"
+	},
+	"Lambda (no params)": {
+		"prefix": "lambda0",
+		"body": [
+			"{ =>",
+			"\t${0}",
+			"}"
+		],
+		"description": "Lambda with no parameters"
+	},
+	"Println": {
+		"prefix": "println",
+		"body": "println(\"${0}\")",
+		"description": "Print line"
+	},
+	"Println Interpolation": {
+		"prefix": "printlni",
+		"body": "println(\"${1:message}: \\${${0}}\")",
+		"description": "Print line with string interpolation"
+	},
+	"Option Type": {
+		"prefix": "option",
+		"body": [
+			"func ${1:find}(${2:id}: Int64): ?${3:Result} {",
+			"\tif (${4:condition}) {",
+			"\t\treturn Some(${5})",
+			"\t}",
+			"\treturn None",
+			"}"
+		],
+		"description": "Function returning Option type"
+	},
+	"Test Class": {
+		"prefix": "test",
+		"body": [
+			"@Test",
+			"class ${1:MyTest} {",
+			"\t@TestCase",
+			"\tfunc ${2:testBasic}() {",
+			"\t\t${0:@Assert(1 + 1 == 2)}",
+			"\t}",
+			"}"
+		],
+		"description": "Test class with test case"
+	},
+	"Test Case": {
+		"prefix": "testcase",
+		"body": [
+			"@TestCase",
+			"func ${1:testName}() {",
+			"\t${0:@Assert(true)}",
+			"}"
+		],
+		"description": "Single test case"
+	},
+	"Test File": {
+		"prefix": "testfile",
+		"body": [
+			"package ${1:my_app}",
+			"",
+			"import std.unittest.*",
+			"import std.unittest.testmacro.*",
+			"",
+			"@Test",
+			"class ${2:MyTest} {",
+			"\t@TestCase",
+			"\tfunc ${3:testBasic}() {",
+			"\t\t${0:@Assert(1 + 1 == 2)}",
+			"\t}",
+			"}"
+		],
+		"description": "Complete test file template"
+	},
+	"Init": {
+		"prefix": "init",
+		"body": [
+			"public init(${1:param}: ${2:Int64}) {",
+			"\tthis.${1:param} = ${1:param}",
+			"\t${0}",
+			"}"
+		],
+		"description": "Constructor (init)"
+	},
+	"Synchronized Block": {
+		"prefix": "sync",
+		"body": [
+			"synchronized(${1:lock}) {",
+			"\t${0}",
+			"}"
+		],
+		"description": "Synchronized block"
+	},
+	"Type Alias": {
+		"prefix": "typealias",
+		"body": "type ${1:NewType} = ${0:OldType}",
+		"description": "Type alias"
+	},
+	"Macro Declaration": {
+		"prefix": "macro",
+		"body": [
+			"public macro ${1:MacroName}(input: Tokens): Tokens {",
+			"\t${0:return input}",
+			"}"
+		],
+		"description": "Macro declaration"
+	},
+	"File Header": {
+		"prefix": "header",
+		"body": [
+			"package ${1:my_app}",
+			"",
+			"import ${2:std.console}.*",
+			"",
+			"${0}"
+		],
+		"description": "File header with package and import"
+	},
+	"cjpm.toml Executable": {
+		"prefix": "cjpmexe",
+		"body": [
+			"[package]",
+			"cjc-version = \"${1:0.55.3}\"",
+			"name = \"${2:my_app}\"",
+			"version = \"${3:1.0.0}\"",
+			"output-type = \"executable\"",
+			"src-dir = \"src\"",
+			"target-dir = \"target\"",
+			"",
+			"[profile.build]",
+			"incremental = true"
+		],
+		"description": "cjpm.toml for executable project"
+	},
+	"cjpm.toml Library": {
+		"prefix": "cjpmlib",
+		"body": [
+			"[package]",
+			"cjc-version = \"${1:0.55.3}\"",
+			"name = \"${2:my_lib}\"",
+			"version = \"${3:1.0.0}\"",
+			"output-type = \"staticlib\"",
+			"src-dir = \"src\"",
+			"target-dir = \"target\""
+		],
+		"description": "cjpm.toml for library project"
+	}
+}

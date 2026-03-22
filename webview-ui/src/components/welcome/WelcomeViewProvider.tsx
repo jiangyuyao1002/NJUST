@@ -33,7 +33,6 @@ const WelcomeViewProvider = () => {
 	const [manualErrorMessage, setManualErrorMessage] = useState<boolean | undefined>(undefined)
 	const manualUrlInputRef = useRef<HTMLInputElement | null>(null)
 
-	// Focus the manual URL input when it becomes visible
 	useEffect(() => {
 		if (showManualEntry && manualUrlInputRef.current) {
 			setTimeout(() => {
@@ -42,20 +41,17 @@ const WelcomeViewProvider = () => {
 		}
 	}, [showManualEntry])
 
-	// Memoize the setApiConfigurationField function to pass to ApiOptions
 	const setApiConfigurationFieldForApiOptions = useCallback(
 		<K extends keyof ProviderSettings>(field: K, value: ProviderSettings[K]) => {
 			setApiConfiguration({ [field]: value })
 		},
-		[setApiConfiguration], // setApiConfiguration from context is stable
+		[setApiConfiguration],
 	)
 
 	const handleGetStarted = useCallback(() => {
-		// If on landing screen, navigate to provider selection
 		if (selectedProvider === null) {
 			setSelectedProvider("custom")
 		} else {
-			// On provider selection screen - validate and save configuration
 			if (!apiConfiguration?.apiProvider) {
 				setErrorMessage(t("settings:validation.providerRequired"))
 				return
@@ -69,7 +65,6 @@ const WelcomeViewProvider = () => {
 			}
 
 			setErrorMessage(undefined)
-			// Save the API configuration
 			vscode.postMessage({
 				type: "upsertApiConfiguration",
 				text: currentApiConfigName,
@@ -78,8 +73,6 @@ const WelcomeViewProvider = () => {
 		}
 	}, [selectedProvider, apiConfiguration, currentApiConfigName, t])
 
-
-	// Landing screen - shown when selectedProvider === null
 	if (selectedProvider === null) {
 		return (
 			<Tab>
@@ -87,13 +80,25 @@ const WelcomeViewProvider = () => {
 					<RooHero />
 					<h2 className="mt-0 mb-0 text-xl">{t("welcome:landing.greeting")}</h2>
 
-					<div className="space-y-4 leading-normal">
+					<div className="space-y-3 leading-normal">
 						<p className="text-base text-vscode-foreground">
 							<Trans i18nKey="welcome:landing.introduction" />
 						</p>
-						<p className="mb-0 font-semibold">
-							<Trans i18nKey="welcome:landing.accountMention" />
-						</p>
+
+						<div className="flex flex-col gap-2 text-sm text-vscode-descriptionForeground">
+							<div className="flex items-center gap-2">
+								<span className="text-vscode-foreground">&#x2713;</span>
+								<span>{t("welcome:landing.featureLsp")}</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-vscode-foreground">&#x2713;</span>
+								<span>{t("welcome:landing.featureToolchain")}</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-vscode-foreground">&#x2713;</span>
+								<span>{t("welcome:landing.featureAi")}</span>
+							</div>
+						</div>
 					</div>
 
 					<div className="mt-2 flex gap-2 items-center">
@@ -114,7 +119,6 @@ const WelcomeViewProvider = () => {
 		)
 	}
 
-	// Provider Selection screen - shown when selectedProvider is "custom"
 	return (
 		<Tab>
 			<TabContent className="flex flex-col gap-4 p-6 justify-center">
@@ -145,7 +149,6 @@ const WelcomeViewProvider = () => {
 						</VSCodeRadio>
 					</VSCodeRadioGroup>
 
-					{/* API Options - always shown */}
 					<div className="mb-8 border-l-2 border-vscode-panel-border pl-6 ml-[7px]">
 						<ApiOptions
 							fromWelcomeView

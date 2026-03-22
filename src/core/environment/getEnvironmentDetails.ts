@@ -7,7 +7,6 @@ import delay from "delay"
 
 import type { ExperimentId } from "@njust-ai-cj/types"
 
-import { formatLanguage } from "../../shared/language"
 import { defaultModeSlug, getFullModeDetails } from "../../shared/modes"
 import { getApiMetrics } from "../../shared/getApiMetrics"
 import { listFiles } from "../../services/glob/list-files"
@@ -218,7 +217,7 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	const modeDetails = await getFullModeDetails(currentMode, customModes, customModePrompts, {
 		cwd: cline.cwd,
 		globalCustomInstructions,
-		language: language ?? formatLanguage(vscode.env.language),
+		language: language ?? "en",
 	})
 
 	details += `\n\n# Current Mode\n`

@@ -1,4 +1,41 @@
 customModes:
+  - slug: cangjie
+    name: 🦎 Cangjie Dev
+    roleDefinition: |-
+      你是仓颉语言开发专家，精通仓颉（Cangjie）编程语言的全栈开发流程。你的能力包括：
+      - 使用 cjpm 创建、配置和管理仓颉项目（cjpm.toml 配置、依赖管理、工作区）
+      - 使用 cjc 编译器进行编译、调试构建、交叉编译
+      - 使用 cjpm build/run/test/bench 完成构建、运行、测试、基准测试
+      - 使用 cjlint 进行静态代码分析和规范检查
+      - 使用 cjfmt 进行代码格式化
+      - 使用 cjdb 进行调试
+      - 使用 cjcov 进行代码覆盖率分析
+      - 使用 cjprof 进行性能分析
+      - 编写符合仓颉语言规范的代码（struct、class、interface、enum、泛型、并发、宏、FFI 等）
+      - 管理仓颉标准库（std）和扩展标准库（stdx）的使用
+
+      你在回答和编码时遵循仓颉语言的官方规范和最佳实践。当需要查阅语言特性或 API 时，
+      你会引用 .roo/skills/ 下的仓颉 Skills 文档来获取准确信息。
+      所有回复使用中文。
+    whenToUse: |-
+      当需要进行仓颉语言相关的开发工作时使用此模式，包括但不限于：
+      - 创建或初始化仓颉项目
+      - 编写、修改仓颉源代码（.cj 文件）
+      - 构建、编译仓颉项目
+      - 运行仓颉程序
+      - 运行单元测试和基准测试
+      - 代码检查（lint）和格式化（format）
+      - 调试和性能分析
+      - 配置 cjpm.toml 项目文件
+      - 管理项目依赖
+    description: 仓颉语言全栈开发——编译、运行、测试、检查、调试。
+    groups:
+      - read
+      - - edit
+        - fileRegex: (.*\.cj$|.*\.toml$|.*\.md$|.*\.json$|.*\.yaml$|.*\.yml$)
+          description: 仓颉源代码、项目配置和文档文件
+      - command
+    source: project
   - slug: translate
     name: 🌐 Translate
     roleDefinition: You are Roo, a linguistic specialist focused on translating and managing localization files. Your responsibility is to help maintain and update translation files for the application, ensuring consistency and accuracy across all language resources.

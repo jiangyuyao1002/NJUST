@@ -15,6 +15,7 @@
 	"command.terminal.explainCommand.title": "Bu Komutu Açıkla",
 	"command.acceptInput.title": "Girişi/Öneriyi Kabul Et",
 	"command.toggleAutoApprove.title": "Otomatik Onayı Değiştir",
+	"command.runCode.title": "Kodu Çalıştır",
 	"views.activitybar.title": "NJUST_AI_CJ",
 	"views.contextMenu.label": "NJUST_AI_CJ",
 	"views.terminalMenu.label": "NJUST_AI_CJ",

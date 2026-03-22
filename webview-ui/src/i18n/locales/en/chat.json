@@ -1,5 +1,5 @@
 {
-	"greeting": "Welcome to NJUST_AI_CJ!",
+	"greeting": "NJUST AI Cangjie Assistant",
 	"task": {
 		"title": "Task",
 		"expand": "Expand task",
@@ -124,17 +124,33 @@
 		"placeholder": "Edit your message..."
 	},
 	"scrollToBottom": "Scroll to bottom of chat",
-	"about": "Roo is a whole AI dev team in your editor",
+	"about": "Your AI-powered Cangjie language development assistant",
 	"docs": "Check our <DocsLink>docs</DocsLink> to get started",
 	"onboarding": "What would you like to do?",
 	"rooTips": {
+		"cangjieToolchain": {
+			"title": "Full toolchain integration",
+			"description": "cjpm build, cjfmt format, cjlint check, cjdb debug — all built in."
+		},
+		"smartDiagnostics": {
+			"title": "Smart error diagnostics",
+			"description": "Auto-matches compile errors to documentation with fix suggestions."
+		},
+		"syntaxAndSnippets": {
+			"title": "Syntax highlighting & code snippets",
+			"description": "TextMate grammar and 47 code snippets for rapid Cangjie development."
+		},
+		"docsIntegration": {
+			"title": "Integrated documentation",
+			"description": "Built-in Cangjie stdlib docs, auto-injected into AI context for accurate answers."
+		},
 		"customizableModes": {
 			"title": "Customizable modes that don't swerve",
 			"description": "Specialized personas that stay on-task and deliver."
 		},
 		"modelAgnostic": {
 			"title": "Bring your own model, no markup or lock-in",
-			"description": "Use your own provider key or even run local inference — Roo doesn't charge for it"
+			"description": "Use your own provider key or even run local inference."
 		}
 	},
 	"selectMode": "Select mode for interaction",
@@ -357,26 +373,13 @@
 	},
 	"announcement": {
 		"title": "NJUST_AI_CJ {{version}} Released",
-		"support": "Please support NJUST_AI_CJ by starring us on <githubLink>GitHub</githubLink>.",
-		"stealthModel": {
-			"feature": "<bold>Limited-time FREE stealth model</bold> - Code Supernova: Now upgraded with a <bold>1M token context window</bold>! A versatile agentic coding model that supports image inputs, accessible through NJUST_AI_CJ Cloud.",
-			"note": "(Note: prompts and completions are logged by the model creator and used to improve the model)",
-			"connectButton": "Connect to NJUST_AI_CJ Cloud",
-			"selectModel": "Select <code>roo/code-supernova</code> from the NJUST_AI_CJ Cloud provider in Settings to get started.",
-			"goToSettingsButton": "Go to Settings"
-		},
+		"support": "",
 		"release": {
 			"heading": "What's New:",
-			"gpt54": "OpenAI GPT-5.4 Support: Added OpenAI GPT-5.4 and GPT-5.3 Chat Latest so you can use the newest OpenAI chat models in NJUST_AI_CJ.",
-			"slashSkills": "Slash Command Skills: Skills can now be exposed as slash commands with fallback execution for faster workflows."
-		},
-		"cloudAgents": {
-			"heading": "New in the Cloud:",
-			"specialized": "Introducing <bold>Explainer</bold>, <bold>Planner</bold>, and <bold>Coder</bold> - three specialized cloud agents to enhance your workflows.",
-			"description": "The agents work together in the cloud and can be triggered from the web or through Slack.",
-			"tryButton": "Try Cloud Agents"
-		},
-		"careers": "Also, <careersLink>we're hiring!</careersLink>"
+			"cangjieToolchain": "Cangjie Toolchain Integration: Added cjfmt formatter, cjlint diagnostics, and cjpm Task Provider for a complete Cangjie development workflow.",
+			"cangjieContext": "AI Context Enhancement: Cangjie Dev mode now auto-injects relevant stdlib docs, smart error diagnostics with fix suggestions, and code review checklists.",
+			"cangjieWelcome": "New Welcome Experience: Redesigned welcome screen and tips tailored for Cangjie language development."
+		}
 	},
 	"reasoning": {
 		"thinking": "Thinking",

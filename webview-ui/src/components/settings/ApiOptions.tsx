@@ -238,7 +238,7 @@ const ApiOptions = ({
 				vscode.postMessage({ type: "requestLmStudioModels" })
 			} else if (selectedProvider === "vscode-lm") {
 				vscode.postMessage({ type: "requestVsCodeLmModels" })
-			} else if (selectedProvider === "litellm" || selectedProvider === "roo") {
+			} else if (selectedProvider === "litellm") {
 				vscode.postMessage({ type: "requestRouterModels" })
 			}
 		},
@@ -434,19 +434,7 @@ const ApiOptions = ({
 			label,
 		}))
 
-		// Pin "roo" to the top if not on welcome screen
-		if (!fromWelcomeView) {
-			const rooIndex = options.findIndex((opt) => opt.value === "roo")
-			if (rooIndex > 0) {
-				const [rooOption] = options.splice(rooIndex, 1)
-				options.unshift(rooOption)
-			}
-		} else {
-			// Filter out roo from the welcome view
-			const filteredOptions = options.filter((opt) => opt.value !== "roo")
-			options.length = 0
-			options.push(...filteredOptions)
-
+		if (fromWelcomeView) {
 			const openRouterIndex = options.findIndex((opt) => opt.value === "openrouter")
 			if (openRouterIndex > 0) {
 				const [openRouterOption] = options.splice(openRouterIndex, 1)
@@ -696,17 +684,6 @@ const ApiOptions = ({
 						<Fireworks
 							apiConfiguration={apiConfiguration}
 							setApiConfigurationField={setApiConfigurationField}
-						/>
-					)}
-
-					{selectedProvider === "roo" && (
-						<Roo
-							apiConfiguration={apiConfiguration}
-							setApiConfigurationField={setApiConfigurationField}
-							routerModels={routerModels}
-							organizationAllowList={organizationAllowList}
-							modelValidationError={modelValidationError}
-							simplifySettings={fromWelcomeView}
 						/>
 					)}
 

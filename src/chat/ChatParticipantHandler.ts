@@ -11,6 +11,7 @@ const COMMAND_MODE_MAP: Record<string, string> = {
 	ask: "ask",
 	debug: "debug",
 	plan: "orchestrator",
+	cangjie: "cangjie",
 }
 
 interface RooChatResult extends vscode.ChatResult {

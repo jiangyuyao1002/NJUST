@@ -11,6 +11,7 @@ import { Task } from "../task/Task"
 
 import { ToolUse, ToolResponse } from "../../shared/tools"
 import { formatResponse } from "../prompts/responses"
+import { enhanceCjcErrorOutput } from "../prompts/sections/cangjie-context"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
 import { ExitCodeDetails, RooTerminalCallbacks, RooTerminalProcess } from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
@@ -507,10 +508,16 @@ export async function executeCommandInTerminal(
 			exitStatus = `Exit code: <undefined, notify user>`
 		}
 
-		return [
-			false,
-			`Command executed in terminal within working directory '${currentWorkingDir}'. ${exitStatus}\nOutput:\n${result}`,
-		]
+		let formattedResult = `Command executed in terminal within working directory '${currentWorkingDir}'. ${exitStatus}\nOutput:\n${result}`
+
+		if (exitDetails?.exitCode !== undefined && exitDetails.exitCode !== 0) {
+			const cangjieHints = enhanceCjcErrorOutput(result, task.cwd)
+			if (cangjieHints) {
+				formattedResult += cangjieHints
+			}
+		}
+
+		return [false, formattedResult]
 	} else {
 		return [
 			false,

@@ -15,6 +15,7 @@
 	"command.terminal.explainCommand.title": "Explicar Este Comando",
 	"command.acceptInput.title": "Aceptar Entrada/Sugerencia",
 	"command.toggleAutoApprove.title": "Alternar Auto-Aprobación",
+	"command.runCode.title": "Ejecutar código",
 	"views.activitybar.title": "NJUST_AI_CJ",
 	"views.contextMenu.label": "NJUST_AI_CJ",
 	"views.terminalMenu.label": "NJUST_AI_CJ",

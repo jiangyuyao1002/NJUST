@@ -1,5 +1,5 @@
 {
-	"greeting": "歡迎使用 NJUST_AI_CJ！",
+	"greeting": "NJUST AI 倉頡開發助手",
 	"task": {
 		"title": "工作",
 		"expand": "展開工作",
@@ -124,17 +124,33 @@
 		"placeholder": "編輯訊息..."
 	},
 	"scrollToBottom": "捲動至對話底部",
-	"about": "Roo 是編輯器中的完整 AI 開發團隊。",
+	"about": "AI 驅動的倉頡語言開發助手，為您的編碼保駕護航。",
 	"docs": "請參閱 <DocsLink>說明文件</DocsLink> 開始使用。",
 	"onboarding": "想要做什麼呢？",
 	"rooTips": {
+		"cangjieToolchain": {
+			"title": "全工具鏈整合",
+			"description": "cjpm 構建、cjfmt 格式化、cjlint 檢查、cjdb 除錯——全部內建。"
+		},
+		"smartDiagnostics": {
+			"title": "智慧錯誤診斷",
+			"description": "自動比對編譯錯誤到對應文件，提供修復建議。"
+		},
+		"syntaxAndSnippets": {
+			"title": "語法突顯與程式碼片段",
+			"description": "TextMate 語法定義和 47 個程式碼片段，加速倉頡開發。"
+		},
+		"docsIntegration": {
+			"title": "內建文件整合",
+			"description": "倉頡標準函式庫文件自動注入 AI 上下文，確保回答準確可靠。"
+		},
 		"customizableModes": {
-			"title": "可自訂模式，專注任務不偏離",
+			"title": "可自訂模式",
 			"description": "專注於任務並交付成果的專業角色。"
 		},
 		"modelAgnostic": {
 			"title": "自備模型，無加價無鎖定",
-			"description": "使用自己的供應商金鑰，甚至可執行本機推論 - Roo 不額外收費"
+			"description": "使用自己的供應商金鑰，甚至可執行本機推論。"
 		}
 	},
 	"selectMode": "選擇互動模式",
@@ -360,29 +376,13 @@
 	},
 	"announcement": {
 		"title": "NJUST_AI_CJ {{version}} 已發布",
-		"support": "請在 <githubLink>GitHub</githubLink> 上給 NJUST_AI_CJ 星星支持我們。",
-		"stealthModel": {
-			"feature": "<bold>限時免費隱形模型</bold> - Code Supernova：現已升級為 <bold>1M Token 上下文視窗</bold>！一個支援影像輸入的多功能代理程式設計模型，透過 NJUST_AI_CJ Cloud 提供。",
-			"note": "（注意：提示詞和回應會被模型建立者記錄並用於改進模型）",
-			"connectButton": "連線到 NJUST_AI_CJ Cloud",
-			"selectModel": "在設定中從 NJUST_AI_CJ Cloud 供應商選擇 <code>roo/code-supernova</code> 開始使用。",
-			"goToSettingsButton": "前往設定"
-		},
+		"support": "",
 		"release": {
 			"heading": "新增功能：",
-			"gpt54": "OpenAI GPT-5.4 支援：已新增 OpenAI GPT-5.4 和 GPT-5.3 Chat Latest，讓你可以在 NJUST_AI_CJ 中使用 OpenAI 最新的聊天模型。",
-			"slashSkills": "Slash 指令技能：現在 skills 可以作為 slash 指令公開，並支援 fallback execution，讓工作流程觸發更快。",
-			"geminiPro": "Gemini 3.1 Pro 支援：新增 Gemini 3.1 Pro 模型支援，並設為預設 Gemini 模型以提升效能。",
-			"cliNdjson": "CLI NDJSON 協定：新增 NDJSON stdin 協定、list 子指令，以及模組化的 run 指令，提供更彈性的 CLI 工作流程。",
-			"cliRelease": "CLI v0.1.0：NJUST_AI_CJ CLI 以穩定的指令介面達成首個正式版本。"
-		},
-		"cloudAgents": {
-			"heading": "雲端的新功能：",
-			"specialized": "推出 <bold>Explainer</bold>、<bold>Planner</bold> 和 <bold>Coder</bold>，三個專業雲端代理用來強化工作流程。",
-			"description": "代理在雲端協同工作，可從網頁或透過 Slack 觸發。",
-			"tryButton": "試用雲端代理"
-		},
-		"careers": "此外，<careersLink>我們正在招募！</careersLink>"
+			"cangjieToolchain": "倉頡工具鏈整合：新增 cjfmt 格式化器、cjlint 診斷檢查、cjpm 任務管理，實現完整的倉頡開發工作流。",
+			"cangjieContext": "AI 上下文增強：Cangjie Dev 模式下自動注入相關標準函式庫文件、智慧錯誤診斷與修復建議、程式碼審查清單。",
+			"cangjieWelcome": "全新歡迎介面：重新設計的歡迎頁面和功能提示，專為倉頡語言開發打造。"
+		}
 	},
 	"reasoning": {
 		"thinking": "思考中",

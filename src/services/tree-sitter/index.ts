@@ -3,6 +3,7 @@ import * as path from "path"
 import { LanguageParser, loadRequiredLanguageParsers } from "./languageParser"
 import { fileExistsAtPath } from "../../utils/fs"
 import { parseMarkdown } from "./markdownParser"
+import { parseCangjie } from "./cangjieParser"
 import { RooIgnoreController } from "../../core/ignore/RooIgnoreController"
 import { QueryCapture } from "web-tree-sitter"
 
@@ -90,6 +91,8 @@ const extensions = [
 	"erb",
 	// Visual Basic .NET
 	"vb",
+	// Cangjie
+	"cj",
 ].map((e) => `.${e}`)
 
 export { extensions }
@@ -132,6 +135,23 @@ export async function parseSourceCodeDefinitionsForFile(
 
 		if (markdownDefinitions) {
 			return `# ${path.basename(filePath)}\n${markdownDefinitions}`
+		}
+		return undefined
+	}
+
+	// Special case for Cangjie files
+	if (ext === ".cj") {
+		if (rooIgnoreController && !rooIgnoreController.validateAccess(filePath)) {
+			return undefined
+		}
+
+		const fileContent = await fs.readFile(filePath, "utf8")
+		const lines = fileContent.split("\n")
+		const cangjieCaptures = parseCangjie(fileContent)
+		const cangjieDefinitions = processCaptures(cangjieCaptures, lines, "cangjie")
+
+		if (cangjieDefinitions) {
+			return `# ${path.basename(filePath)}\n${cangjieDefinitions}`
 		}
 		return undefined
 	}

@@ -15,6 +15,7 @@
 	"command.terminal.explainCommand.title": "यह कमांड समझाएं",
 	"command.acceptInput.title": "इनपुट/सुझाव स्वीकारें",
 	"command.toggleAutoApprove.title": "ऑटो-अनुमोदन टॉगल करें",
+	"command.runCode.title": "कोड चलाएँ",
 	"views.activitybar.title": "NJUST_AI_CJ",
 	"views.contextMenu.label": "NJUST_AI_CJ",
 	"views.terminalMenu.label": "NJUST_AI_CJ",

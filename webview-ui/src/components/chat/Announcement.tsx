@@ -1,9 +1,7 @@
 import { memo, useState } from "react"
-import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 
 import { Package } from "@roo/package"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
-import { vscode } from "@src/utils/vscode"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@src/components/ui"
 
 interface AnnouncementProps {
@@ -38,18 +36,14 @@ const Announcement = ({ hideAnnouncement }: AnnouncementProps) => {
 					<DialogTitle>{t("chat:announcement.title", { version: Package.version })}</DialogTitle>
 				</DialogHeader>
 				<div>
-					{/* Regular Release Highlights */}
 					<div className="mb-4">
 						<p className="mb-3">{t("chat:announcement.release.heading")}</p>
 						<ul className="list-disc list-inside text-sm space-y-1.5">
-							<li>{t("chat:announcement.release.gpt54")}</li>
-							<li>{t("chat:announcement.release.slashSkills")}</li>
+							<li>{t("chat:announcement.release.cangjieToolchain")}</li>
+							<li>{t("chat:announcement.release.cangjieContext")}</li>
+							<li>{t("chat:announcement.release.cangjieWelcome")}</li>
 						</ul>
 					</div>
-
-
-
-
 				</div>
 			</DialogContent>
 		</Dialog>

@@ -4,6 +4,7 @@ import * as path from "path"
 import { Node } from "web-tree-sitter"
 import { LanguageParser, loadRequiredLanguageParsers } from "../../tree-sitter/languageParser"
 import { parseMarkdown } from "../../tree-sitter/markdownParser"
+import { parseCangjieWithFallback } from "../../tree-sitter/cangjieParser"
 import { ICodeParser, CodeBlock } from "../interfaces"
 import { scannerExtensions, shouldUseFallbackChunking } from "../shared/supported-extensions"
 import { MAX_BLOCK_CHARS, MIN_BLOCK_CHARS, MIN_CHUNK_REMAINDER_CHARS, MAX_CHARS_TOLERANCE_FACTOR } from "../constants"
@@ -92,6 +93,11 @@ export class CodeParser implements ICodeParser {
 		// Handle markdown files specially
 		if (ext === "md" || ext === "markdown") {
 			return this.parseMarkdownContent(filePath, content, fileHash, seenSegmentHashes)
+		}
+
+		// Handle Cangjie files with dedicated AST parser
+		if (ext === "cj") {
+			return this.parseCangjieContent(filePath, content, fileHash, seenSegmentHashes)
 		}
 
 		// Check if this extension should use fallback chunking
@@ -446,6 +452,134 @@ export class CodeParser implements ICodeParser {
 			]
 		}
 
+		return []
+	}
+
+	private async parseCangjieContent(
+		filePath: string,
+		content: string,
+		fileHash: string,
+		seenSegmentHashes: Set<string>,
+	): Promise<CodeBlock[]> {
+		const defs = await parseCangjieWithFallback(filePath, content)
+		if (defs.length === 0) {
+			return this._performFallbackChunking(filePath, content, fileHash, seenSegmentHashes)
+		}
+
+		const lines = content.split("\n")
+		const results: CodeBlock[] = []
+		let lastProcessedLine = 0
+
+		// Process content before the first definition
+		if (defs.length > 0 && defs[0].startLine > 0) {
+			const preDefLines = lines.slice(0, defs[0].startLine)
+			const preDefBlocks = this.processCangjieSection(
+				preDefLines,
+				filePath,
+				fileHash,
+				"cangjie_header",
+				seenSegmentHashes,
+				1,
+			)
+			results.push(...preDefBlocks)
+		}
+
+		for (const def of defs) {
+			const startLine = def.startLine + 1 // 1-based
+			const endLine = def.endLine + 1
+			const sectionLines = lines.slice(def.startLine, def.endLine + 1)
+			const sectionContent = sectionLines.join("\n")
+
+			if (sectionContent.trim().length < MIN_BLOCK_CHARS) continue
+
+			const needsChunking =
+				sectionContent.length > MAX_BLOCK_CHARS * MAX_CHARS_TOLERANCE_FACTOR ||
+				sectionLines.some((l) => l.length > MAX_BLOCK_CHARS * MAX_CHARS_TOLERANCE_FACTOR)
+
+			if (needsChunking) {
+				const chunks = this._chunkTextByLines(
+					sectionLines,
+					filePath,
+					fileHash,
+					`cangjie_${def.kind}`,
+					seenSegmentHashes,
+					startLine,
+				)
+				chunks.forEach((chunk) => { chunk.identifier = def.name })
+				results.push(...chunks)
+			} else {
+				const contentPreview = sectionContent.slice(0, 100)
+				const segmentHash = createHash("sha256")
+					.update(`${filePath}-${startLine}-${endLine}-${sectionContent.length}-${contentPreview}`)
+					.digest("hex")
+
+				if (!seenSegmentHashes.has(segmentHash)) {
+					seenSegmentHashes.add(segmentHash)
+					results.push({
+						file_path: filePath,
+						identifier: def.name,
+						type: `cangjie_${def.kind}`,
+						start_line: startLine,
+						end_line: endLine,
+						content: sectionContent,
+						segmentHash,
+						fileHash,
+					})
+				}
+			}
+
+			lastProcessedLine = def.endLine + 1
+		}
+
+		// Process remaining content after last definition
+		if (lastProcessedLine < lines.length) {
+			const remainingLines = lines.slice(lastProcessedLine)
+			const remainingBlocks = this.processCangjieSection(
+				remainingLines,
+				filePath,
+				fileHash,
+				"cangjie_content",
+				seenSegmentHashes,
+				lastProcessedLine + 1,
+			)
+			results.push(...remainingBlocks)
+		}
+
+		return results
+	}
+
+	private processCangjieSection(
+		lines: string[],
+		filePath: string,
+		fileHash: string,
+		type: string,
+		seenSegmentHashes: Set<string>,
+		startLine: number,
+		identifier: string | null = null,
+	): CodeBlock[] {
+		const content = lines.join("\n")
+		if (content.trim().length < MIN_BLOCK_CHARS) return []
+
+		const needsChunking =
+			content.length > MAX_BLOCK_CHARS * MAX_CHARS_TOLERANCE_FACTOR ||
+			lines.some((line) => line.length > MAX_BLOCK_CHARS * MAX_CHARS_TOLERANCE_FACTOR)
+
+		if (needsChunking) {
+			const chunks = this._chunkTextByLines(lines, filePath, fileHash, type, seenSegmentHashes, startLine)
+			if (identifier) chunks.forEach((c) => { c.identifier = identifier })
+			return chunks
+		}
+
+		const endLine = startLine + lines.length - 1
+		const contentPreview = content.slice(0, 100)
+		const segmentHash = createHash("sha256")
+			.update(`${filePath}-${startLine}-${endLine}-${content.length}-${contentPreview}`)
+			.digest("hex")
+
+		if (!seenSegmentHashes.has(segmentHash)) {
+			seenSegmentHashes.add(segmentHash)
+			return [{ file_path: filePath, identifier, type, start_line: startLine, end_line: endLine, content, segmentHash, fileHash }]
+		}
 		return []
 	}
 

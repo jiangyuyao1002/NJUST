@@ -15,6 +15,7 @@
 	"command.terminal.explainCommand.title": "解释此命令",
 	"command.acceptInput.title": "接受输入/建议",
 	"command.toggleAutoApprove.title": "切换自动批准",
+	"command.runCode.title": "运行代码",
 	"views.activitybar.title": "NJUST_AI_CJ",
 	"views.contextMenu.label": "NJUST_AI_CJ",
 	"views.terminalMenu.label": "NJUST_AI_CJ",

@@ -32,5 +32,14 @@
 !assets/icons/**
 !assets/images/**
 
+# Include language configuration files
+!languages/**
+
+# Include syntax highlighting grammars
+!syntaxes/**
+
+# Include code snippets
+!snippets/**
+
 # Include .env file for telemetry
 !.env
