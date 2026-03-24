@@ -73,6 +73,31 @@ export class NativeToolCallParser {
 		}
 	>()
 
+	/**
+	 * Attempt to recover malformed tool call arguments that fail JSON.parse.
+	 * Some models (e.g. DeepSeek) may output markdown-style content directly
+	 * instead of proper JSON string values.
+	 */
+	private static tryRecoverMalformedArgs(
+		toolName: string,
+		rawArgs: string,
+	): Record<string, unknown> | null {
+		if (toolName === "update_todo_list") {
+			const todosMatch = rawArgs.match(/\{"todos"\s*:\s*/)
+			if (todosMatch) {
+				const content = rawArgs.slice(todosMatch[0].length).replace(/\}?\s*$/, "")
+				const unquoted = content.replace(/^"/, "").replace(/"$/, "")
+				if (/\[[ x\-]\]/.test(unquoted)) {
+					return { todos: unquoted }
+				}
+			}
+			if (/\[[ x\-]\]/.test(rawArgs)) {
+				return { todos: rawArgs.trim() }
+			}
+		}
+		return null
+	}
+
 	private static coerceOptionalBoolean(value: unknown): boolean | undefined {
 		if (typeof value === "boolean") {
 			return value
@@ -425,25 +450,24 @@ export class NativeToolCallParser {
 				}
 				// New format: { path: "...", mode: "..." }
 				if (!nativeArgs && partialArgs.path !== undefined) {
+					const indent =
+						partialArgs.indentation && typeof partialArgs.indentation === "object"
+							? (partialArgs.indentation as Record<string, unknown>)
+							: undefined
 					nativeArgs = {
 						path: partialArgs.path,
 						mode: partialArgs.mode,
 						offset: this.coerceOptionalNumber(partialArgs.offset),
 						limit: this.coerceOptionalNumber(partialArgs.limit),
-						indentation:
-							partialArgs.indentation && typeof partialArgs.indentation === "object"
-								? {
-										anchor_line: this.coerceOptionalNumber(partialArgs.indentation.anchor_line),
-										max_levels: this.coerceOptionalNumber(partialArgs.indentation.max_levels),
-										max_lines: this.coerceOptionalNumber(partialArgs.indentation.max_lines),
-										include_siblings: this.coerceOptionalBoolean(
-											partialArgs.indentation.include_siblings,
-										),
-										include_header: this.coerceOptionalBoolean(
-											partialArgs.indentation.include_header,
-										),
-									}
-								: undefined,
+						indentation: indent
+							? {
+									anchor_line: this.coerceOptionalNumber(indent.anchor_line),
+									max_levels: this.coerceOptionalNumber(indent.max_levels),
+									max_lines: this.coerceOptionalNumber(indent.max_lines),
+									include_siblings: this.coerceOptionalBoolean(indent.include_siblings),
+									include_header: this.coerceOptionalBoolean(indent.include_header),
+								}
+							: undefined,
 					}
 				}
 				break
@@ -506,6 +530,15 @@ export class NativeToolCallParser {
 						prompt: partialArgs.prompt,
 						path: partialArgs.path,
 						image: partialArgs.image,
+					}
+				}
+				break
+
+			case "web_search":
+				if (partialArgs.search_query !== undefined) {
+					nativeArgs = {
+						search_query: partialArgs.search_query,
+						count: this.coerceOptionalNumber(partialArgs.count),
 					}
 				}
 				break
@@ -697,8 +730,18 @@ export class NativeToolCallParser {
 		}
 
 		try {
-			// Parse the arguments JSON string
-			const args = toolCall.arguments === "" ? {} : JSON.parse(toolCall.arguments)
+			// Parse the arguments JSON string, with recovery for malformed tool calls
+			let args: Record<string, unknown>
+			try {
+				args = toolCall.arguments === "" ? {} : JSON.parse(toolCall.arguments)
+			} catch (parseError) {
+				const recovered = this.tryRecoverMalformedArgs(resolvedName, toolCall.arguments)
+				if (recovered) {
+					args = recovered
+				} else {
+					throw parseError
+				}
+			}
 
 			// Build stringified params for display/logging.
 			// Tool execution MUST use nativeArgs (typed) and does not support legacy fallbacks.
@@ -756,23 +799,24 @@ export class NativeToolCallParser {
 					}
 					// New format: { path: "...", mode: "..." }
 					if (!nativeArgs && args.path !== undefined) {
+						const indent =
+							args.indentation && typeof args.indentation === "object"
+								? (args.indentation as Record<string, unknown>)
+								: undefined
 						nativeArgs = {
 							path: args.path,
 							mode: args.mode,
 							offset: this.coerceOptionalNumber(args.offset),
 							limit: this.coerceOptionalNumber(args.limit),
-							indentation:
-								args.indentation && typeof args.indentation === "object"
-									? {
-											anchor_line: this.coerceOptionalNumber(args.indentation.anchor_line),
-											max_levels: this.coerceOptionalNumber(args.indentation.max_levels),
-											max_lines: this.coerceOptionalNumber(args.indentation.max_lines),
-											include_siblings: this.coerceOptionalBoolean(
-												args.indentation.include_siblings,
-											),
-											include_header: this.coerceOptionalBoolean(args.indentation.include_header),
-										}
-									: undefined,
+							indentation: indent
+								? {
+										anchor_line: this.coerceOptionalNumber(indent.anchor_line),
+										max_levels: this.coerceOptionalNumber(indent.max_levels),
+										max_lines: this.coerceOptionalNumber(indent.max_lines),
+										include_siblings: this.coerceOptionalBoolean(indent.include_siblings),
+										include_header: this.coerceOptionalBoolean(indent.include_header),
+									}
+								: undefined,
 						} as NativeArgsFor<TName>
 					}
 					break
@@ -842,6 +886,15 @@ export class NativeToolCallParser {
 							prompt: args.prompt,
 							path: args.path,
 							image: args.image,
+						} as NativeArgsFor<TName>
+					}
+					break
+
+				case "web_search":
+					if (args.search_query !== undefined) {
+						nativeArgs = {
+							search_query: args.search_query,
+							count: typeof args.count === "number" ? args.count : undefined,
 						} as NativeArgsFor<TName>
 					}
 					break

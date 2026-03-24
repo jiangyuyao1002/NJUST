@@ -152,6 +152,14 @@
 
 @layer base {
 	:root {
+		--roo-font-serif:
+			serif,
+		    "Source Han Serif SC",
+			"Noto Serif SC",
+			"Songti SC",
+			"STSong",
+			"SimSun",
+			"Times New Roman";
 		--background: var(--vscode-editor-background);
 		--foreground: var(--vscode-editor-foreground);
 		--card: var(--vscode-editor-background);
@@ -258,6 +266,53 @@ html {
 body {
 	margin: 0;
 	line-height: 1.25;
+	font-family: var(--roo-font-body), var(--vscode-font-family), serif;
+	letter-spacing: 0.01em;
+	--roo-font-body: var(--roo-font-serif);
+}
+
+body[data-font="sans-serif"] {
+	--roo-font-body:
+		"Microsoft YaHei",
+		"PingFang SC",
+		"Noto Sans SC",
+		"Source Han Sans SC",
+		"WenQuanYi Micro Hei",
+		system-ui,
+		-apple-system,
+		sans-serif;
+	letter-spacing: 0;
+}
+
+body[data-font="default"] {
+	--roo-font-body: var(--vscode-font-family);
+	letter-spacing: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-family: var(--roo-font-body), var(--vscode-font-family), serif;
+	font-weight: 600;
+	letter-spacing: 0.015em;
+}
+
+body[data-font="sans-serif"] h1,
+body[data-font="sans-serif"] h2,
+body[data-font="sans-serif"] h3,
+body[data-font="sans-serif"] h4,
+body[data-font="sans-serif"] h5,
+body[data-font="sans-serif"] h6,
+body[data-font="default"] h1,
+body[data-font="default"] h2,
+body[data-font="default"] h3,
+body[data-font="default"] h4,
+body[data-font="default"] h5,
+body[data-font="default"] h6 {
+	letter-spacing: 0;
 }
 
 body.scrollable,
@@ -418,7 +473,7 @@ vscode-dropdown::part(listbox) {
 	background-color: color-mix(in srgb, var(--vscode-badge-foreground) 15%, transparent);
 	border-radius: 6px;
 	padding: 1px 4px;
-	font-family: var(--font-mono);
+	font-family: serif,var(--font-mono);
 }
 
 .mention-context-highlight-with-shadow {
@@ -426,7 +481,7 @@ vscode-dropdown::part(listbox) {
 	border-radius: 3px;
 	padding: 1px 4px;
 	box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--vscode-badge-foreground) 30%, transparent);
-	font-family: var(--font-mono);
+	font-family: serif,var(--font-mono);
 }
 
 /**

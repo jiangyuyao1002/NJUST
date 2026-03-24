@@ -91,6 +91,7 @@ export interface ExtensionMessage {
 		| "worktreeDefaults"
 		| "worktreeIncludeStatus"
 		| "branchWorktreeIncludeResult"
+		| "webSearchStatus"
 		| "folderSelected"
 		| "skills"
 		| "fileContent"
@@ -309,6 +310,11 @@ export type ExtensionState = Pick<
 
 	enableCheckpoints: boolean
 	checkpointTimeout: number // Timeout for checkpoint initialization in seconds (default: 15)
+	enableWebSearch: boolean
+	fontFamily?: "serif" | "sans-serif" | "default"
+	webSearchProvider?: "baidu-free" | "duckduckgo" | "tavily" | "bing" | "google" | "baidu" | "serpapi"
+	serpApiEngine?: "bing" | "google" | "baidu" | "yandex" | "yahoo" | "duckduckgo"
+	webSearchApiKey?: string
 	maxOpenTabsContext: number // Maximum number of VSCode open tabs to include in context (0-500)
 	maxWorkspaceFiles: number // Maximum number of files to include in current working directory details (0-500)
 	showRooIgnoredFiles: boolean // Whether to show .rooignore'd files in listings
@@ -545,6 +551,7 @@ export interface WebviewMessage {
 		| "checkoutBranch"
 		| "browseForWorktreePath"
 		// Skills messages
+		| "testWebSearch"
 		| "requestSkills"
 		| "createSkill"
 		| "deleteSkill"

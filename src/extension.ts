@@ -32,9 +32,23 @@ import { TerminalRegistry } from "./integrations/terminal/TerminalRegistry"
 import { McpServerManager } from "./services/mcp/McpServerManager"
 import { CodeIndexManager } from "./services/code-index/manager"
 import { CangjieLspClient } from "./services/cangjie-lsp/CangjieLspClient"
+import { CangjieLspStatusBar } from "./services/cangjie-lsp/CangjieLspStatusBar"
 import { CjfmtFormatter } from "./services/cangjie-lsp/CjfmtFormatter"
 import { CjlintDiagnostics } from "./services/cangjie-lsp/CjlintDiagnostics"
 import { CjpmTaskProvider } from "./services/cangjie-lsp/CjpmTaskProvider"
+import { registerCangjieCommands } from "./services/cangjie-lsp/cangjieCommands"
+import { CangjieCodeActionProvider } from "./services/cangjie-lsp/CangjieCodeActionProvider"
+import { checkAndPromptSdkSetup } from "./services/cangjie-lsp/CangjieSdkSetup"
+import { CangjieDocumentSymbolProvider } from "./services/cangjie-lsp/CangjieDocumentSymbolProvider"
+import { CangjieFoldingRangeProvider } from "./services/cangjie-lsp/CangjieFoldingRangeProvider"
+import { CangjieHoverProvider } from "./services/cangjie-lsp/CangjieHoverProvider"
+import { CangjieTestCodeLensProvider } from "./services/cangjie-lsp/CangjieTestCodeLensProvider"
+import { CangjieDebugAdapterFactory, CangjieDebugConfigurationProvider } from "./services/cangjie-lsp/CangjieDebugAdapterFactory"
+import { CangjieSymbolIndex } from "./services/cangjie-lsp/CangjieSymbolIndex"
+import { CangjieDefinitionProvider } from "./services/cangjie-lsp/CangjieDefinitionProvider"
+import { CangjieReferenceProvider } from "./services/cangjie-lsp/CangjieReferenceProvider"
+import { CangjieEnhancedRenameProvider } from "./services/cangjie-lsp/CangjieEnhancedRenameProvider"
+import { CangjieMacroCodeLensProvider, CangjieMacroHoverProvider, registerMacroCommands } from "./services/cangjie-lsp/CangjieMacroProvider"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./utils/autoImportSettings"
 import { API } from "./extension/api"
@@ -62,9 +76,11 @@ import { ChatParticipantHandler, registerLMTools, ChatStateSync } from "./chat"
 let outputChannel: vscode.OutputChannel
 let extensionContext: vscode.ExtensionContext
 let cangjieLspClient: CangjieLspClient | undefined
+let cangjieLspStatusBar: CangjieLspStatusBar | undefined
 let cjfmtFormatter: CjfmtFormatter | undefined
 let cjlintDiagnostics: CjlintDiagnostics | undefined
 let cjpmTaskProvider: CjpmTaskProvider | undefined
+let cangjieSymbolIndex: CangjieSymbolIndex | undefined
 let rooToolsMcpServer: RooToolsMcpServer | undefined
 
 /**
@@ -149,6 +165,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		context.globalState.update("allowedCommands", defaultCommands)
 	}
 
+	// Auto-generate Cloud Agent device token on first activation.
+	if (!context.globalState.get<string>("njustCloudDeviceToken")) {
+		const { randomUUID } = await import("crypto")
+		const token = randomUUID()
+		await context.globalState.update("njustCloudDeviceToken", token)
+		outputChannel.appendLine(`[CloudAgent] Generated device token: ${token.slice(0, 8)}...`)
+	}
+
+	// Sync device token into workspace config so Task can read it.
+	const cloudDeviceToken = context.globalState.get<string>("njustCloudDeviceToken")!
+	const cloudConfig = vscode.workspace.getConfiguration(Package.name)
+	if (cloudConfig.get<string>("cloudAgent.deviceToken") !== cloudDeviceToken) {
+		await cloudConfig.update("cloudAgent.deviceToken", cloudDeviceToken, vscode.ConfigurationTarget.Global)
+	}
+
 	const contextProxy = await ContextProxy.getInstance(context)
 
 	// Initialize code index managers for all workspace folders.
@@ -174,21 +205,35 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
-	// Initialize and start the Cangjie Language Server client.
+	// Initialize and start the Cangjie Language Server client (lazy: defers until .cj file is opened).
 	cangjieLspClient = new CangjieLspClient(outputChannel)
 	context.subscriptions.push({ dispose: () => cangjieLspClient?.dispose() })
+
+	// Defer formatter and linter until a .cj file is actually opened.
+	cangjieLspClient.onCangjieActivated(() => {
+		if (!cjfmtFormatter) {
+			cjfmtFormatter = new CjfmtFormatter(outputChannel)
+			context.subscriptions.push(cjfmtFormatter)
+		}
+		if (!cjlintDiagnostics) {
+			cjlintDiagnostics = new CjlintDiagnostics(outputChannel)
+			context.subscriptions.push(cjlintDiagnostics)
+		}
+	})
+
+	cangjieLspStatusBar = new CangjieLspStatusBar(cangjieLspClient, cangjieLspClient.lspOutputChannel)
+	context.subscriptions.push(cangjieLspStatusBar)
+
+	registerCangjieCommands(context, cangjieLspClient)
+
+	void checkAndPromptSdkSetup(context, outputChannel).catch(() => {})
+
 	void cangjieLspClient.start().catch((error) => {
 		const message = error instanceof Error ? error.message : String(error)
 		outputChannel.appendLine(`[CangjieLSP] Error during startup: ${message}`)
 	})
 
-	// Initialize Cangjie toolchain integrations.
-	cjfmtFormatter = new CjfmtFormatter(outputChannel)
-	context.subscriptions.push(cjfmtFormatter)
-
-	cjlintDiagnostics = new CjlintDiagnostics(outputChannel)
-	context.subscriptions.push(cjlintDiagnostics)
-
+	// cjpm tasks are always registered (user may run tasks before opening .cj files).
 	cjpmTaskProvider = new CjpmTaskProvider(outputChannel)
 	context.subscriptions.push(cjpmTaskProvider)
 
@@ -265,6 +310,121 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
+	context.subscriptions.push(
+		vscode.languages.registerCodeActionsProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieCodeActionProvider(),
+			{ providedCodeActionKinds: CangjieCodeActionProvider.providedCodeActionKinds },
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerDocumentSymbolProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieDocumentSymbolProvider(),
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerFoldingRangeProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieFoldingRangeProvider(),
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerHoverProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieHoverProvider(),
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieTestCodeLensProvider(),
+		),
+	)
+
+	// Cangjie debugger (DAP)
+	const debugFactory = new CangjieDebugAdapterFactory()
+	context.subscriptions.push(
+		vscode.debug.registerDebugAdapterDescriptorFactory("cangjie", debugFactory),
+	)
+	context.subscriptions.push(
+		vscode.debug.registerDebugConfigurationProvider("cangjie", new CangjieDebugConfigurationProvider()),
+	)
+
+	// Test run/debug commands for CodeLens
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai-cj.cangjieRunTest", (testName: string, fileUri?: vscode.Uri) => {
+			const folder = fileUri ? vscode.workspace.getWorkspaceFolder(fileUri) : vscode.workspace.workspaceFolders?.[0]
+			const cwd = folder?.uri.fsPath
+			const terminal = vscode.window.createTerminal({ name: "Cangjie Test", cwd })
+			terminal.show()
+			terminal.sendText(`cjpm test --filter "${testName}"`)
+		}),
+	)
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai-cj.cangjieDebugTest", (testName: string, fileUri?: vscode.Uri) => {
+			const folder = fileUri ? vscode.workspace.getWorkspaceFolder(fileUri) : undefined
+			vscode.debug.startDebugging(folder, {
+				type: "cangjie",
+				request: "launch",
+				name: `调试测试: ${testName}`,
+				program: "${workspaceFolder}/target/output",
+				args: ["--test", "--filter", testName],
+				cwd: "${workspaceFolder}",
+				preLaunchTask: "cjpm: build",
+			})
+		}),
+	)
+
+	// Cangjie symbol index (persistent cross-file index for definition/reference/rename fallback)
+	cangjieSymbolIndex = new CangjieSymbolIndex(outputChannel)
+	context.subscriptions.push(cangjieSymbolIndex)
+	void cangjieSymbolIndex.initialize().catch((err) => {
+		outputChannel.appendLine(`[SymbolIndex] Initialization error: ${err instanceof Error ? err.message : String(err)}`)
+	})
+
+	context.subscriptions.push(
+		vscode.languages.registerDefinitionProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieDefinitionProvider(cangjieSymbolIndex),
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerReferenceProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieReferenceProvider(cangjieSymbolIndex),
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerRenameProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieEnhancedRenameProvider(cangjieSymbolIndex),
+		),
+	)
+
+	// Macro CodeLens + Hover + commands
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieMacroCodeLensProvider(cangjieSymbolIndex),
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerHoverProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieMacroHoverProvider(cangjieSymbolIndex),
+		),
+	)
+
+	registerMacroCommands(context, outputChannel)
+
 	registerCodeActions(context)
 	registerTerminalActions(context)
 
@@ -273,6 +433,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const mcpServerEnabled = mcpServerConfig.get<boolean>("mcpServer.enabled", false)
 	if (mcpServerEnabled) {
 		const port = mcpServerConfig.get<number>("mcpServer.port", 3100)
+		const bindAddress = mcpServerConfig.get<string>("mcpServer.bindAddress", "127.0.0.1")
 		const authToken = mcpServerConfig.get<string>("mcpServer.authToken", "") || undefined
 		const workspacePath = getWorkspacePath()
 
@@ -280,6 +441,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			rooToolsMcpServer = new RooToolsMcpServer({
 				workspacePath,
 				port,
+				bindAddress,
 				authToken,
 				allowedCommands: defaultCommands,
 				deniedCommands: mcpServerConfig.get<string[]>("deniedCommands", []),
@@ -288,7 +450,12 @@ export async function activate(context: vscode.ExtensionContext) {
 			rooToolsMcpServer
 				.start()
 				.then(() => {
-					outputChannel.appendLine(`[McpToolsServer] Started on http://127.0.0.1:${port}/mcp`)
+					outputChannel.appendLine(`[McpToolsServer] Started on http://${bindAddress}:${port}/mcp`)
+					if (bindAddress === "0.0.0.0") {
+						outputChannel.appendLine(
+							`[McpToolsServer] WARNING: Server is accessible from remote machines. Ensure authToken is set and firewall rules are configured.`,
+						)
+					}
 				})
 				.catch((error) => {
 					outputChannel.appendLine(
@@ -373,12 +540,16 @@ export async function deactivate() {
 		cangjieLspClient = undefined
 	}
 
+	cangjieLspStatusBar?.dispose()
+	cangjieLspStatusBar = undefined
 	cjfmtFormatter?.dispose()
 	cjfmtFormatter = undefined
 	cjlintDiagnostics?.dispose()
 	cjlintDiagnostics = undefined
 	cjpmTaskProvider?.dispose()
 	cjpmTaskProvider = undefined
+	cangjieSymbolIndex?.dispose()
+	cangjieSymbolIndex = undefined
 
 	if (rooToolsMcpServer) {
 		await rooToolsMcpServer.stop()

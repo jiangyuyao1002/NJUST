@@ -17,7 +17,7 @@ import {
 	SquareTerminal,
 	FlaskConical,
 	AlertTriangle,
-	Globe,
+	Paintbrush,
 	Info,
 	MessageSquare,
 	LucideIcon,
@@ -29,6 +29,7 @@ import {
 	ArrowLeft,
 	GitCommitVertical,
 	GraduationCap,
+	Search,
 } from "lucide-react"
 
 import {
@@ -70,7 +71,8 @@ import { NotificationSettings } from "./NotificationSettings"
 import { ContextManagementSettings } from "./ContextManagementSettings"
 import { TerminalSettings } from "./TerminalSettings"
 import { ExperimentalSettings } from "./ExperimentalSettings"
-import { LanguageSettings } from "./LanguageSettings"
+import { WebSearchSettings } from "./WebSearchSettings"
+import { AppearanceSettings } from "./AppearanceSettings"
 import { About } from "./About"
 import { Section } from "./Section"
 import PromptsSettings from "./PromptsSettings"
@@ -103,13 +105,14 @@ export const sectionNames = [
 	"notifications",
 	"contextManagement",
 	"terminal",
+	"webSearch",
 	"modes",
 	"mcp",
 	"worktrees",
 	"prompts",
 	"ui",
 	"experimental",
-	"language",
+	"appearance",
 	"about",
 ] as const
 
@@ -153,6 +156,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		allowedMaxRequests,
 		allowedMaxCost,
 		language,
+		fontFamily,
 		alwaysAllowExecute,
 		alwaysAllowMcp,
 		alwaysAllowModeSwitch,
@@ -164,6 +168,10 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		autoCondenseContextPercent,
 		enableCheckpoints,
 		checkpointTimeout,
+		enableWebSearch,
+		webSearchProvider,
+		serpApiEngine,
+		webSearchApiKey,
 		experiments,
 		maxOpenTabsContext,
 		maxWorkspaceFiles,
@@ -351,6 +359,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 				type: "updateSettings",
 				updatedSettings: {
 					language,
+					fontFamily,
 					alwaysAllowReadOnly: alwaysAllowReadOnly ?? undefined,
 					alwaysAllowReadOnlyOutsideWorkspace: alwaysAllowReadOnlyOutsideWorkspace ?? undefined,
 					alwaysAllowWrite: alwaysAllowWrite ?? undefined,
@@ -374,6 +383,10 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					ttsSpeed,
 					enableCheckpoints: enableCheckpoints ?? false,
 					checkpointTimeout: checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+					enableWebSearch: enableWebSearch ?? false,
+					webSearchProvider: webSearchProvider ?? "tavily",
+					serpApiEngine: serpApiEngine ?? "bing",
+					webSearchApiKey: webSearchApiKey ?? "",
 					writeDelayMs,
 					terminalShellIntegrationTimeout: terminalShellIntegrationTimeout ?? 30_000,
 					terminalShellIntegrationDisabled,
@@ -504,11 +517,12 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			{ id: "notifications", icon: Bell },
 			{ id: "contextManagement", icon: Database },
 			{ id: "terminal", icon: SquareTerminal },
+			{ id: "webSearch", icon: Search },
 			{ id: "prompts", icon: MessageSquare },
 			{ id: "worktrees", icon: GitBranch },
 			{ id: "ui", icon: Glasses },
 			{ id: "experimental", icon: FlaskConical },
-			{ id: "language", icon: Globe },
+			{ id: "appearance", icon: Paintbrush },
 			{ id: "about", icon: Info },
 		],
 		[], // No dependencies needed now
@@ -852,6 +866,17 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 							/>
 						)}
 
+						{/* Web Search Section */}
+						{renderTab === "webSearch" && (
+							<WebSearchSettings
+								enableWebSearch={enableWebSearch}
+								webSearchProvider={webSearchProvider}
+								serpApiEngine={serpApiEngine}
+								webSearchApiKey={webSearchApiKey}
+								setCachedStateField={setCachedStateField}
+							/>
+						)}
+
 						{/* Modes Section */}
 						{renderTab === "modes" && <ModesView />}
 
@@ -900,9 +925,13 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 							/>
 						)}
 
-						{/* Language Section */}
-						{renderTab === "language" && (
-							<LanguageSettings language={language || "en"} setCachedStateField={setCachedStateField} />
+						{/* Appearance Section */}
+						{renderTab === "appearance" && (
+							<AppearanceSettings
+								language={language || "en"}
+								fontFamily={fontFamily || "serif"}
+								setCachedStateField={setCachedStateField}
+							/>
 						)}
 
 						{/* About Section */}

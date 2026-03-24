@@ -167,6 +167,16 @@ export type CustomSupportPrompts = z.infer<typeof customSupportPromptsSchema>
 
 export const DEFAULT_MODES: readonly ModeConfig[] = [
 	{
+		slug: "cloud-agent",
+		name: "☁️ Cloud Agent",
+		roleDefinition:
+			"You are a cloud-powered AI agent that plans and executes coding tasks remotely. The VS Code plugin provides local tool execution capabilities while you drive the planning and reasoning loop from the cloud.",
+		whenToUse:
+			"Default mode. Use this when you want the cloud AI agent to plan and implement tasks in your workspace. The agent handles reasoning and planning while tools execute locally in your VS Code.",
+		description: "Cloud AI agent drives planning, local tools execute",
+		groups: ["read", "edit", "command", "mcp"],
+	},
+	{
 		slug: "architect",
 		name: "🏗️ Architect",
 		roleDefinition:

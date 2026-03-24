@@ -760,6 +760,9 @@ export class ClineProvider
 			},
 		)
 
+		// Reset web search to off on each session start
+		await this.contextProxy.setValue("enableWebSearch", false)
+
 		// Set up webview options with proper resource roots
 		const resourceRoots = [this.contextProxy.extensionUri]
 
@@ -1972,6 +1975,10 @@ export class ClineProvider
 			ttsSpeed,
 			enableCheckpoints,
 			checkpointTimeout,
+			enableWebSearch,
+			webSearchProvider,
+			serpApiEngine,
+			webSearchApiKey,
 			taskHistory,
 			soundVolume,
 			writeDelayMs,
@@ -2000,6 +2007,7 @@ export class ClineProvider
 			showRooIgnoredFiles,
 			enableSubfolderRules,
 			language,
+			fontFamily,
 			maxImageFileSize,
 			maxTotalImageSize,
 			historyPreviewCollapsed,
@@ -2070,6 +2078,10 @@ export class ClineProvider
 			ttsSpeed: ttsSpeed ?? 1.0,
 			enableCheckpoints: enableCheckpoints ?? true,
 			checkpointTimeout: checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+			enableWebSearch: enableWebSearch ?? false,
+			webSearchProvider: webSearchProvider ?? "baidu-free",
+			serpApiEngine: serpApiEngine ?? "bing",
+			webSearchApiKey: webSearchApiKey ?? "",
 			shouldShowAnnouncement: lastShownAnnouncementId !== this.latestAnnouncementId,
 			allowedCommands: mergedAllowedCommands,
 			deniedCommands: mergedDeniedCommands,
@@ -2102,6 +2114,7 @@ export class ClineProvider
 			showRooIgnoredFiles: showRooIgnoredFiles ?? false,
 			enableSubfolderRules: enableSubfolderRules ?? false,
 			language: language ?? "en",
+			fontFamily: fontFamily ?? "serif",
 			renderContext: this.renderContext,
 			maxImageFileSize: maxImageFileSize ?? 5,
 			maxTotalImageSize: maxTotalImageSize ?? 20,
@@ -2227,6 +2240,10 @@ export class ClineProvider
 			ttsSpeed: stateValues.ttsSpeed ?? 1.0,
 			enableCheckpoints: stateValues.enableCheckpoints ?? true,
 			checkpointTimeout: stateValues.checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+			enableWebSearch: stateValues.enableWebSearch ?? false,
+			webSearchProvider: stateValues.webSearchProvider ?? "baidu-free",
+			serpApiEngine: stateValues.serpApiEngine ?? "bing",
+			webSearchApiKey: stateValues.webSearchApiKey ?? "",
 			soundVolume: stateValues.soundVolume,
 			writeDelayMs: stateValues.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS,
 			terminalShellIntegrationTimeout:
@@ -2240,6 +2257,7 @@ export class ClineProvider
 			terminalZdotdir: stateValues.terminalZdotdir ?? false,
 			mode: stateValues.mode ?? defaultModeSlug,
 			language: stateValues.language ?? "en",
+			fontFamily: stateValues.fontFamily ?? "serif",
 			mcpEnabled: stateValues.mcpEnabled ?? true,
 			mcpServers: this.mcpHub?.getAllServers() ?? [],
 			currentApiConfigName: stateValues.currentApiConfigName ?? "default",

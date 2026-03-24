@@ -24,6 +24,7 @@ import {
 	getSkillsSection,
 } from "./sections"
 import { getCangjieContextSection } from "./sections/cangjie-context"
+import { getMultiFileContextSection } from "./sections/multi-file-context"
 
 // Helper function to get prompt component, filtering out empty objects
 export function getPromptComponent(
@@ -80,9 +81,46 @@ async function generatePrompt(
 	])
 
 	const cangjieContextSection = getCangjieContextSection(cwd, mode as string)
+	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
 
 	// Tools catalog is not included in the system prompt.
 	const toolsCatalog = ""
+
+	const webSearchSection = settings?.enableWebSearch
+		? `
+
+====
+
+WEB SEARCH
+
+You have the web_search tool available for retrieving real-time information from the internet. Do NOT say "web search is unavailable" — you CAN search the web.
+
+CRITICAL: NEVER use execute_command with curl, wget, httpie, Invoke-WebRequest, or any HTTP client to fetch web content. Use web_search instead.
+
+EFFICIENCY RULES (IMPORTANT):
+- Use AT MOST 1-2 searches per user question. One well-crafted search query is usually enough.
+- Combine multiple aspects into a SINGLE search query instead of searching separately for each aspect.
+  BAD: search "gold price" then search "gold price today" then search "gold price USD"
+  GOOD: search "today gold price USD" (one query covers everything)
+- Do NOT repeat or rephrase searches if the first search returned relevant results.
+- If the first search gives a clear answer, STOP searching and respond immediately.
+- Only do a second search if the first one truly failed to answer the question.
+
+WHEN TO USE:
+- When the user asks about recent events, current prices, latest versions, or time-sensitive topics
+- When you lack knowledge about a specific project, product, or technology
+- When the user explicitly asks you to search or look something up
+
+WHEN NOT TO USE:
+- When you already have reliable knowledge to answer the question
+- When the question is about general programming concepts, syntax, or well-established patterns
+- When previous search results in this conversation already contain the answer
+
+HOW TO USE:
+- Craft ONE specific, comprehensive search query that covers the user's full question
+- Always synthesize results and cite source URLs
+- Prefer web search results over training data when they conflict (search results are more recent)`
+		: ""
 
 	const basePrompt = `${roleDefinition}
 
@@ -92,10 +130,10 @@ ${getSharedToolUseSection()}${toolsCatalog}
 
 	${getToolUseGuidelinesSection()}
 
-${getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined)}
+${getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined)}${webSearchSection}
 
 ${modesSection}
-${skillsSection ? `\n${skillsSection}` : ""}${cangjieContextSection ? `\n${cangjieContextSection}` : ""}
+${skillsSection ? `\n${skillsSection}` : ""}${cangjieContextSection ? `\n${cangjieContextSection}` : ""}${multiFileContextSection ? `\n${multiFileContextSection}` : ""}
 ${getRulesSection(cwd, settings)}
 
 ${getSystemInfoSection(cwd)}

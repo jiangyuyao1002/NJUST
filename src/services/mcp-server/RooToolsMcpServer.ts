@@ -18,6 +18,7 @@ import {
 interface RooToolsMcpServerOptions {
 	workspacePath: string
 	port: number
+	bindAddress: string
 	authToken?: string
 	allowedCommands?: string[]
 	deniedCommands?: string[]
@@ -153,11 +154,24 @@ export class RooToolsMcpServer {
 		return server
 	}
 
+	private isLocalOnly(): boolean {
+		const addr = this.options.bindAddress
+		return addr === "127.0.0.1" || addr === "localhost" || addr === "::1"
+	}
+
 	async start(): Promise<void> {
-		const { port, authToken } = this.options
+		const { port, bindAddress, authToken } = this.options
+
+		if (!this.isLocalOnly() && !authToken) {
+			throw new Error(
+				"Security: authToken is required when binding to a non-localhost address. " +
+					"Set njust-ai-cj.mcpServer.authToken in your settings before exposing the MCP server to the network.",
+			)
+		}
 
 		this.httpServer = http.createServer(async (req, res) => {
-			res.setHeader("Access-Control-Allow-Origin", "*")
+			const allowedOrigin = this.isLocalOnly() ? "*" : (req.headers.origin ?? "*")
+			res.setHeader("Access-Control-Allow-Origin", allowedOrigin)
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, Authorization")
 			res.setHeader("Access-Control-Expose-Headers", "mcp-session-id")
@@ -174,7 +188,7 @@ export class RooToolsMcpServer {
 				return
 			}
 
-			const url = new URL(req.url ?? "/", `http://localhost:${port}`)
+			const url = new URL(req.url ?? "/", `http://${bindAddress}:${port}`)
 			if (url.pathname !== "/mcp") {
 				res.writeHead(404, { "Content-Type": "application/json" })
 				res.end(JSON.stringify({ error: "Not found" }))
@@ -207,7 +221,7 @@ export class RooToolsMcpServer {
 		})
 
 		return new Promise<void>((resolve, reject) => {
-			this.httpServer!.listen(port, "127.0.0.1", () => {
+			this.httpServer!.listen(port, bindAddress, () => {
 				resolve()
 			})
 			this.httpServer!.on("error", reject)

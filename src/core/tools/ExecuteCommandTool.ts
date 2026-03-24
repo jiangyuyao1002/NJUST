@@ -56,6 +56,18 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			const canonicalCommand = unescapeHtmlEntities(command)
 
+			{
+				const earlyState = await task.providerRef.deref()?.getState()
+				if (earlyState?.enableWebSearch && isHttpCommand(canonicalCommand)) {
+					pushToolResult(
+						"This command attempts to make an HTTP request (curl/wget/etc.), which is blocked. " +
+							"Use the web_search tool instead to retrieve information from the internet. " +
+							'Example: { "search_query": "your query here", "count": 5 }',
+					)
+					return
+				}
+			}
+
 			const ignoredFileAttemptedToAccess = task.rooIgnoreController?.validateCommand(canonicalCommand)
 
 			if (ignoredFileAttemptedToAccess) {
@@ -593,6 +605,22 @@ function formatBytes(bytes: number): string {
 		return `${(bytes / 1024).toFixed(1)}KB`
 	}
 	return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+const HTTP_COMMAND_PATTERNS = [
+	/\bcurl\s/i,
+	/\bwget\s/i,
+	/\bhttpie\b/i,
+	/\bhttp\s+(GET|POST|PUT|DELETE|PATCH|HEAD)\b/i,
+	/\bInvoke-WebRequest\b/i,
+	/\bInvoke-RestMethod\b/i,
+	/\biwr\s/i,
+	/\birm\s/i,
+	/\bfetch\b.*https?:/i,
+]
+
+function isHttpCommand(command: string): boolean {
+	return HTTP_COMMAND_PATTERNS.some((pattern) => pattern.test(command))
 }
 
 export const executeCommandTool = new ExecuteCommandTool()

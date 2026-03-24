@@ -12,5 +12,6 @@
 	"typescript.tsc.autoDetect": "off",
 	"vitest.disableWorkspaceWarning": true,
 	"njust-ai-cj.mcpServer.enabled": true,
-	"njust-ai-cj.mcpServer.port": 3100
+	"njust-ai-cj.mcpServer.port": 3100,
+	"njust-ai-cj.cloudAgent.serverUrl": "http://localhost:4000"
 }

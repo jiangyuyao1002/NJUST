@@ -238,7 +238,8 @@ function buildCangjieConfig(filePath: string): RunConfig {
 	const cjpmRoot = findProjectRoot(fileDir, ["cjpm.toml"])
 	if (cjpmRoot) {
 		const cjpm = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath") || "cjpm"
-		return { command: `"${cjpm}" run`, cwd: cjpmRoot, env }
+		const cmd = isWin ? `& "${cjpm}" run` : `"${cjpm}" run`
+		return { command: cmd, cwd: cjpmRoot, env }
 	}
 
 	const cjc = resolveCangjieToolPath("cjc", "cangjieLsp.cjcPath") || "cjc"

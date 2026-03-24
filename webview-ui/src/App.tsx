@@ -52,7 +52,16 @@ const App = () => {
 		shouldShowAnnouncement,
 		renderContext,
 		mdmCompliant,
+		fontFamily,
 	} = useExtensionState()
+
+	useEffect(() => {
+		if (fontFamily && fontFamily !== "serif") {
+			document.body.setAttribute("data-font", fontFamily)
+		} else {
+			document.body.removeAttribute("data-font")
+		}
+	}, [fontFamily])
 
 	const [showAnnouncement, setShowAnnouncement] = useState(false)
 	const [tab, setTab] = useState<Tab>("chat")

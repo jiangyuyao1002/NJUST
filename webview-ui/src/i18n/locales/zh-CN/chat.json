@@ -135,6 +135,14 @@
 	"sendMessage": "发送消息",
 	"pressToSend": "按 {{keyCombination}} 发送",
 	"stopTts": "停止文本转语音",
+	"webSearch": {
+		"label": "联网",
+		"enable": "启用联网搜索",
+		"disable": "关闭联网搜索",
+		"testing": "正在测试联网搜索连接...",
+		"statusOk": "联网搜索可用",
+		"statusError": "联网搜索不可用"
+	},
 	"typeMessage": "输入消息...",
 	"typeTask": "在此处输入您的任务...",
 	"addContext": "@添加上下文，/输入命令",
@@ -261,7 +269,7 @@
 	"response": "响应",
 	"arguments": "参数",
 	"text": {
-		"rooSaid": "Roo 说"
+		"rooSaid": "NJUST_AI_CJ 说"
 	},
 	"feedback": {
 		"youSaid": "你说"
@@ -287,7 +295,7 @@
 		"goToSubtask": "查看任务"
 	},
 	"questions": {
-		"hasQuestion": "Roo有一个问题"
+		"hasQuestion": "NJUST_AI_CJ有一个问题"
 	},
 	"taskCompleted": "任务完成",
 	"modelResponseIncomplete": "模型响应不完整",

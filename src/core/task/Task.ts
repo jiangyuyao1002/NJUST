@@ -84,6 +84,16 @@ import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor
 // utils
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
 import { getWorkspacePath } from "../../utils/path"
+import { CloudAgentClient } from "../../services/cloud-agent/CloudAgentClient"
+import type { CloudAgentCallbacks } from "../../services/cloud-agent/types"
+import {
+	execReadFile,
+	execWriteFile,
+	execListFiles,
+	execSearchFiles,
+	execCommand,
+	execApplyDiff,
+} from "../../services/mcp-server/tool-executors"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
@@ -1933,23 +1943,34 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			}
 			this.isInitialized = true
 
-			const imageBlocks: Anthropic.ImageBlockParam[] = formatResponse.imageBlocks(images)
+			const mode = await this.getTaskMode()
 
-			// Task starting
-			await this.initiateTaskLoop([
-				{
-					type: "text",
-					text: `<user_message>\n${task}\n</user_message>`,
-				},
-				...imageBlocks,
-			]).catch((error) => {
-				// Swallow loop rejection when the task was intentionally abandoned/aborted
-				// during delegation or user cancellation to prevent unhandled rejections.
-				if (this.abandoned === true || this.abortReason === "user_cancelled") {
-					return
-				}
-				throw error
-			})
+			if (mode === "cloud-agent") {
+				await this.initiateCloudAgentLoop(task ?? "", images).catch((error) => {
+					if (this.abandoned === true || this.abortReason === "user_cancelled") {
+						return
+					}
+					throw error
+				})
+			} else {
+				const imageBlocks: Anthropic.ImageBlockParam[] = formatResponse.imageBlocks(images)
+
+				// Task starting
+				await this.initiateTaskLoop([
+					{
+						type: "text",
+						text: `<user_message>\n${task}\n</user_message>`,
+					},
+					...imageBlocks,
+				]).catch((error) => {
+					// Swallow loop rejection when the task was intentionally abandoned/aborted
+					// during delegation or user cancellation to prevent unhandled rejections.
+					if (this.abandoned === true || this.abortReason === "user_cancelled") {
+						return
+					}
+					throw error
+				})
+			}
 		} catch (error) {
 			// In tests and some UX flows, tasks can be aborted while `startTask` is still
 			// initializing. Treat abort/abandon as expected and avoid unhandled rejections.
@@ -2427,6 +2448,142 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Continue task loop - pass empty array to signal no new user content needed
 		// The initiateTaskLoop will handle this by skipping user message addition
 		await this.initiateTaskLoop([])
+	}
+
+	// Cloud Agent Loop (MCP protocol)
+
+	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
+		const config = vscode.workspace.getConfiguration(Package.name)
+		const serverUrl = config.get<string>("cloudAgent.serverUrl", "http://120.79.250.232:8765")
+		const deviceToken = config.get<string>("cloudAgent.deviceToken", "")
+
+		if (!deviceToken) {
+			await this.say("error", "Cloud Agent device token not found. Please restart VS Code.")
+			return
+		}
+
+		const callbacks: CloudAgentCallbacks = {
+			onText: async (content) => {
+				await this.say("text", content)
+			},
+			onReasoning: async (content) => {
+				await this.say("reasoning", content)
+			},
+			onDone: async (summary) => {
+				if (summary) {
+					await this.say("completion_result", summary)
+				}
+			},
+			onError: async (message) => {
+				await this.say("error", message)
+			},
+			onToolExecution: async (name, args) => {
+				return await this.executeCloudToolCall(name, args)
+			},
+		}
+
+		const client = new CloudAgentClient(serverUrl, deviceToken, callbacks)
+		this.emit(NJUST_AI_CJEventName.TaskStarted)
+
+		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent task submitted" }))
+
+		try {
+			await client.connect()
+			const result = await client.submitTask(this.taskId, userMessage, this.cwd)
+			await this.say("api_req_finished", JSON.stringify({ tokensIn: 0, tokensOut: 0, cost: 0 }))
+
+			if (result) {
+				await this.say("text", result)
+			}
+		} catch (error) {
+			if (this.abort) return
+			const errorMsg = error instanceof Error ? error.message : String(error)
+			await this.say("error", `Cloud Agent error: ${errorMsg}`)
+			await this.ask("api_req_failed", errorMsg)
+		} finally {
+			await client.disconnect()
+		}
+	}
+
+	private cloudToolToSayTool(name: string, args: Record<string, unknown>): { tool: string; path?: string; content?: string; diff?: string } {
+		switch (name) {
+			case "read_file":
+				return { tool: "readFile", path: String(args.path ?? "") }
+			case "write_to_file":
+				return { tool: "newFileCreated", path: String(args.path ?? ""), content: String(args.content ?? "") }
+			case "list_files":
+				return { tool: args.recursive ? "listFilesRecursive" : "listFilesTopLevel", path: String(args.path ?? "") }
+			case "search_files":
+				return { tool: "searchFiles", path: String(args.path ?? "") }
+			case "execute_command":
+				return { tool: "readCommandOutput", content: String(args.command ?? "") }
+			case "apply_diff":
+				return { tool: "appliedDiff", path: String(args.path ?? ""), diff: String(args.diff ?? "") }
+			default:
+				return { tool: "readFile", path: name }
+		}
+	}
+
+	private async executeCloudToolCall(
+		name: string,
+		args: Record<string, unknown>,
+	): Promise<string> {
+		const sayTool = this.cloudToolToSayTool(name, args)
+		const { response } = await this.ask("tool", JSON.stringify(sayTool))
+
+		if (response !== "yesButtonClicked") {
+			throw new Error("Tool call rejected by user")
+		}
+
+		const cwd = this.cwd
+		let result: string
+
+		switch (name) {
+			case "read_file":
+				result = await execReadFile(cwd, {
+					path: String(args.path ?? ""),
+					start_line: args.start_line as number | undefined,
+					end_line: args.end_line as number | undefined,
+				})
+				break
+			case "write_to_file":
+				result = await execWriteFile(cwd, {
+					path: String(args.path ?? ""),
+					content: String(args.content ?? ""),
+				})
+				break
+			case "list_files":
+				result = await execListFiles(cwd, {
+					path: String(args.path ?? ""),
+					recursive: args.recursive as boolean | undefined,
+				})
+				break
+			case "search_files":
+				result = await execSearchFiles(cwd, {
+					path: String(args.path ?? ""),
+					regex: String(args.regex ?? ""),
+					file_pattern: args.file_pattern as string | undefined,
+				})
+				break
+			case "execute_command":
+				result = await execCommand(cwd, {
+					command: String(args.command ?? ""),
+					cwd: args.cwd as string | undefined,
+					timeout: args.timeout as number | undefined,
+				})
+				break
+			case "apply_diff":
+				result = await execApplyDiff(cwd, {
+					path: String(args.path ?? ""),
+					diff: String(args.diff ?? ""),
+				})
+				break
+			default:
+				throw new Error(`Unknown tool: ${name}`)
+		}
+
+		await this.say("text", `[${name}] completed`)
+		return result
 	}
 
 	// Task Loop
@@ -3712,6 +3869,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			language,
 			apiConfiguration,
 			enableSubfolderRules,
+			enableWebSearch,
 		} = state ?? {}
 
 		return await (async () => {
@@ -3745,6 +3903,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						.getConfiguration(Package.name)
 						.get<boolean>("newTaskRequireTodos", false),
 					isStealthModel: modelInfo?.isStealthModel,
+					enableWebSearch: enableWebSearch ?? false,
 				},
 				undefined, // todoList
 				this.api.getModel().id,

@@ -48,6 +48,7 @@ export class CjfmtFormatter implements vscode.DocumentFormattingEditProvider, vs
 		token: vscode.CancellationToken,
 		range?: vscode.Range,
 	): Promise<vscode.TextEdit[]> {
+		const t0 = Date.now()
 		const cjfmtPath = resolveCangjieToolPath("cjfmt", "cangjieTools.cjfmtPath")
 		if (!cjfmtPath) {
 			this.outputChannel.appendLine("[CjFmt] cjfmt not found. Set njust-ai-cj.cangjieTools.cjfmtPath or CANGJIE_HOME.")
@@ -88,6 +89,10 @@ export class CjfmtFormatter implements vscode.DocumentFormattingEditProvider, vs
 			const fullRange = new vscode.Range(
 				document.positionAt(0),
 				document.positionAt(originalContent.length),
+			)
+
+			this.outputChannel.appendLine(
+				`[Perf] cjfmt formatted ${path.basename(document.fileName)} in ${Date.now() - t0}ms`,
 			)
 
 			return [vscode.TextEdit.replace(fullRange, formattedContent)]

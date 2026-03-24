@@ -1,7 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useEvent } from "react-use"
 import DynamicTextArea from "react-textarea-autosize"
-import { VolumeX, Image, WandSparkles, SendHorizontal, X, ListEnd, Square } from "lucide-react"
+import { VolumeX, Image, WandSparkles, SendHorizontal, X, ListEnd, Square, Globe, Loader2, AlertTriangle } from "lucide-react"
 
 import type { ExtensionMessage } from "@njust-ai-cj/types"
 
@@ -97,6 +97,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			commands,
 			enterBehavior,
 			lockApiConfigAcrossModes,
+			enableWebSearch,
 		} = useExtensionState()
 
 		// Find the ID and display text for the currently selected API configuration.
@@ -113,6 +114,8 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [fileSearchResults, setFileSearchResults] = useState<SearchResult[]>([])
 		const [searchLoading, setSearchLoading] = useState(false)
 		const [searchRequestId, setSearchRequestId] = useState<string>("")
+		const [webSearchStatus, setWebSearchStatus] = useState<"idle" | "testing" | "ok" | "error">("idle")
+		const [webSearchError, setWebSearchError] = useState<string>("")
 
 		// Close dropdown when clicking outside.
 		useEffect(() => {
@@ -198,6 +201,20 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					setSearchLoading(false)
 					if (message.requestId === searchRequestId) {
 						setFileSearchResults(message.results || [])
+					}
+				} else if (message.type === "webSearchStatus") {
+					try {
+						const result = JSON.parse(message.text)
+						if (result.status === "ok") {
+							setWebSearchStatus("ok")
+							setWebSearchError("")
+						} else {
+							setWebSearchStatus("error")
+							setWebSearchError(result.message || "Unknown error")
+						}
+					} catch {
+						setWebSearchStatus("error")
+						setWebSearchError("Failed to parse status")
 					}
 				}
 			}
@@ -1319,6 +1336,58 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							onToggleLockApiConfig={handleToggleLockApiConfig}
 						/>
 						<AutoApproveDropdown triggerClassName="min-w-[28px] text-ellipsis overflow-hidden flex-shrink" />
+						<StandardTooltip
+							content={
+								enableWebSearch
+									? webSearchStatus === "testing"
+										? t("chat:webSearch.testing")
+										: webSearchStatus === "ok"
+											? t("chat:webSearch.statusOk")
+											: webSearchStatus === "error"
+												? `${t("chat:webSearch.statusError")}: ${webSearchError}`
+												: t("chat:webSearch.disable")
+									: t("chat:webSearch.enable")
+							}>
+							<button
+								aria-label={enableWebSearch ? t("chat:webSearch.disable") : t("chat:webSearch.enable")}
+								onClick={() => {
+									const newEnabled = !enableWebSearch
+									vscode.postMessage({
+										type: "updateSettings",
+										updatedSettings: { enableWebSearch: newEnabled },
+									})
+									if (newEnabled) {
+										setWebSearchStatus("testing")
+										setWebSearchError("")
+										vscode.postMessage({ type: "testWebSearch" })
+									} else {
+										setWebSearchStatus("idle")
+										setWebSearchError("")
+									}
+								}}
+								className={cn(
+									"relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded",
+									"text-xs font-medium cursor-pointer border-none",
+									"transition-all duration-150",
+									"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
+									enableWebSearch
+										? webSearchStatus === "error"
+											? "text-[#f48771] bg-[rgba(244,135,113,0.12)] opacity-100"
+											: webSearchStatus === "ok"
+												? "text-[#89d185] bg-[rgba(137,209,133,0.12)] opacity-100"
+												: "text-vscode-focusBorder bg-[rgba(var(--vscode-focusBorder-rgb,79,140,200),0.15)] opacity-100"
+										: "text-vscode-descriptionForeground bg-transparent opacity-60 hover:opacity-80",
+								)}>
+								{enableWebSearch && webSearchStatus === "testing" ? (
+									<Loader2 className="w-3.5 h-3.5 flex-shrink-0 animate-spin" />
+								) : enableWebSearch && webSearchStatus === "error" ? (
+									<AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+								) : (
+									<Globe className="w-3.5 h-3.5 flex-shrink-0" />
+								)}
+								<span className="text-ellipsis overflow-hidden flex-shrink">{t("chat:webSearch.label")}</span>
+							</button>
+						</StandardTooltip>
 					</div>
 					<div
 						className={cn(

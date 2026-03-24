@@ -1,9 +1,12 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
+import { parseCangjieDefinitions, type CangjieDef } from "../../../services/tree-sitter/cangjieParser"
+import { CangjieSymbolIndex, type SymbolEntry } from "../../../services/cangjie-lsp/CangjieSymbolIndex"
 
 const IMPORT_REGEX = /^\s*import\s+([\w.]+)\.\*?\s*$/gm
 const FROM_IMPORT_REGEX = /^\s*from\s+([\w.]+)\s+import\s+/gm
+const PACKAGE_DECL_REGEX = /^\s*package\s+([\w.]+)\s*$/m
 
 interface DocMapping {
 	prefix: string
@@ -368,6 +371,299 @@ function collectActiveCangjieImports(): string[] {
 	}
 
 	return [...new Set(allImports)]
+}
+
+/**
+ * Collect symbol definitions from all visible .cj files for AI context.
+ * Groups child definitions (functions inside classes) for readability.
+ */
+function collectActiveCangjieSymbols(): string | null {
+	const MAX_DEFS = 30
+	const fileSymbols: Array<{ fileName: string; defs: CangjieDef[] }> = []
+	let totalDefs = 0
+
+	for (const editor of vscode.window.visibleTextEditors) {
+		if (!(editor.document.languageId === "cangjie" || editor.document.fileName.endsWith(".cj"))) {
+			continue
+		}
+		const content = editor.document.getText()
+		const defs = parseCangjieDefinitions(content).filter(
+			(d: CangjieDef) => d.kind !== "import" && d.kind !== "package",
+		)
+		if (defs.length === 0) continue
+		fileSymbols.push({ fileName: path.basename(editor.document.fileName), defs })
+		totalDefs += defs.length
+	}
+
+	if (fileSymbols.length === 0) return null
+
+	const lines: string[] = ["## 当前编辑文件的符号定义\n"]
+
+	let remaining = MAX_DEFS
+	for (const { fileName, defs } of fileSymbols) {
+		lines.push(`**${fileName}**:`)
+
+		const topLevel = totalDefs > MAX_DEFS
+			? defs.filter((d) => ["class", "struct", "interface", "enum", "extend", "main"].includes(d.kind))
+			: defs
+
+		for (const def of topLevel) {
+			if (remaining <= 0) break
+			const span = def.endLine > def.startLine ? ` (${def.startLine + 1}-${def.endLine + 1} 行)` : ""
+
+			const children = defs.filter(
+				(d) => d !== def && d.startLine > def.startLine && d.endLine <= def.endLine && d.kind === "func",
+			)
+
+			if (children.length > 0) {
+				const childNames = children.slice(0, 5).map((c) => c.name).join(", ")
+				const suffix = children.length > 5 ? ` 等 ${children.length} 个方法` : ""
+				lines.push(`- ${def.kind} ${def.name}${span}: 包含 ${childNames}${suffix}`)
+			} else {
+				lines.push(`- ${def.kind} ${def.name}${span}`)
+			}
+			remaining--
+		}
+
+		if (remaining <= 0) {
+			lines.push(`- …（已省略，共 ${totalDefs} 个定义）`)
+			break
+		}
+	}
+
+	return lines.join("\n")
+}
+
+// ---------------------------------------------------------------------------
+// Cross-file symbol resolution via CangjieSymbolIndex
+// ---------------------------------------------------------------------------
+
+const MAX_IMPORT_SYMBOLS = 60
+const MAX_SYMBOLS_PER_PACKAGE = 15
+
+/**
+ * Resolve local (non-stdlib) import paths to workspace symbols using
+ * CangjieSymbolIndex. For each import like `import mylib.utils.*`, find
+ * the corresponding directory under src/ and return its public symbols.
+ */
+function resolveImportedSymbols(
+	imports: string[],
+	cwd: string,
+	projectInfo: CjpmProjectInfo | null,
+): string | null {
+	const symbolIndex = CangjieSymbolIndex.getInstance()
+	if (!symbolIndex || symbolIndex.symbolCount === 0) return null
+
+	const localImports = imports.filter((imp) => !imp.startsWith("std."))
+	if (localImports.length === 0) return null
+
+	const rootName = projectInfo?.name || ""
+	const srcDir = projectInfo?.srcDir || "src"
+
+	const sections: string[] = []
+	let totalSymbols = 0
+
+	for (const imp of localImports) {
+		if (totalSymbols >= MAX_IMPORT_SYMBOLS) break
+
+		const dirPath = resolveImportToDirectory(imp, cwd, rootName, srcDir, projectInfo)
+		if (!dirPath) continue
+
+		const symbols = symbolIndex.getSymbolsByDirectory(dirPath)
+		if (symbols.length === 0) continue
+
+		const publicSymbols = symbols.slice(0, MAX_SYMBOLS_PER_PACKAGE)
+		const lines = formatSymbolEntries(publicSymbols, cwd)
+		if (lines.length === 0) continue
+
+		sections.push(`**${imp}** (${path.relative(cwd, dirPath).replace(/\\/g, "/")}/):\n${lines.join("\n")}`)
+		totalSymbols += publicSymbols.length
+	}
+
+	if (sections.length === 0) return null
+
+	return `## 已导入的工作区模块符号\n\n以下是当前文件 import 的本地包中的符号定义，可直接在代码中引用：\n\n${sections.join("\n\n")}`
+}
+
+/**
+ * Map an import path like "mylib.utils.http" to the corresponding directory
+ * on disk. Tries several strategies:
+ *  1. Strip root package name and map remaining segments to src/ subdirs
+ *  2. For workspace projects, check if the first segment matches a member name
+ */
+function resolveImportToDirectory(
+	importPath: string,
+	cwd: string,
+	rootName: string,
+	srcDir: string,
+	projectInfo: CjpmProjectInfo | null,
+): string | null {
+	const segments = importPath.split(".")
+
+	if (projectInfo?.isWorkspace && projectInfo.members) {
+		const memberMatch = projectInfo.members.find((m) => m.name === segments[0])
+		if (memberMatch) {
+			const memberCwd = path.join(cwd, memberMatch.path)
+			const subPath = segments.slice(1).join(path.sep)
+			const candidate = subPath
+				? path.join(memberCwd, "src", subPath)
+				: path.join(memberCwd, "src")
+			if (fs.existsSync(candidate)) return candidate
+		}
+	}
+
+	if (rootName && segments[0] === rootName) {
+		const subPath = segments.slice(1).join(path.sep)
+		const candidate = subPath
+			? path.join(cwd, srcDir, subPath)
+			: path.join(cwd, srcDir)
+		if (fs.existsSync(candidate)) return candidate
+	}
+
+	const directPath = segments.join(path.sep)
+	const candidate = path.join(cwd, srcDir, directPath)
+	if (fs.existsSync(candidate)) return candidate
+
+	return null
+}
+
+function formatSymbolEntries(symbols: SymbolEntry[], cwd: string): string[] {
+	const lines: string[] = []
+	const grouped = new Map<string, SymbolEntry[]>()
+
+	for (const sym of symbols) {
+		const relFile = path.relative(cwd, sym.filePath).replace(/\\/g, "/")
+		if (!grouped.has(relFile)) grouped.set(relFile, [])
+		grouped.get(relFile)!.push(sym)
+	}
+
+	for (const [file, syms] of grouped) {
+		for (const sym of syms) {
+			const sig = sym.signature ? `: \`${sym.signature}\`` : ""
+			lines.push(`- ${sym.kind} **${sym.name}**${sig} _(${file}:${sym.startLine + 1})_`)
+		}
+	}
+
+	return lines
+}
+
+// ---------------------------------------------------------------------------
+// Source-level package declaration verification
+// ---------------------------------------------------------------------------
+
+/**
+ * Read actual `package` declarations from .cj source files and compare
+ * with directory-inferred package names. Report mismatches so the AI
+ * can generate correct package declarations.
+ */
+function verifyPackageDeclarations(
+	root: PackageNode,
+	cwd: string,
+	srcDir: string,
+): string | null {
+	const mismatches: string[] = []
+	const MAX_CHECKS = 50
+	let checked = 0
+
+	function walk(node: PackageNode): void {
+		if (checked >= MAX_CHECKS) return
+
+		for (const fileName of node.sourceFiles) {
+			if (checked >= MAX_CHECKS) return
+			checked++
+
+			const filePath = path.join(cwd, node.dirPath, fileName)
+			try {
+				const content = fs.readFileSync(filePath, "utf-8")
+				const match = content.match(PACKAGE_DECL_REGEX)
+				const declaredPkg = match ? match[1] : null
+				const expectedPkg = node.packageName
+
+				if (declaredPkg && declaredPkg !== expectedPkg) {
+					const relPath = path.relative(cwd, filePath).replace(/\\/g, "/")
+					mismatches.push(
+						`- ${relPath}: 声明 \`package ${declaredPkg}\`，但目录推导应为 \`package ${expectedPkg}\``,
+					)
+				} else if (!declaredPkg && node.packageName.includes(".")) {
+					const relPath = path.relative(cwd, filePath).replace(/\\/g, "/")
+					mismatches.push(
+						`- ${relPath}: **缺少 package 声明**，应声明 \`package ${expectedPkg}\``,
+					)
+				}
+			} catch {
+				// skip unreadable files
+			}
+		}
+
+		for (const child of node.children) {
+			walk(child)
+		}
+	}
+
+	walk(root)
+
+	if (mismatches.length === 0) return null
+
+	return (
+		`## ⚠ 包声明不一致\n\n` +
+		`以下文件的 \`package\` 声明与目录结构不匹配，**生成代码时请使用正确的包名**：\n\n` +
+		mismatches.join("\n") +
+		`\n\n规则: 文件所在目录相对于 ${srcDir}/ 的路径决定包名（如 ${srcDir}/network/http/ → package <root>.network.http）`
+	)
+}
+
+// ---------------------------------------------------------------------------
+// Workspace cross-module symbol summary
+// ---------------------------------------------------------------------------
+
+/**
+ * For workspace projects, generate a summary of public symbols in each
+ * member module so the AI knows what's available across modules.
+ */
+function buildWorkspaceSymbolSummary(
+	info: CjpmProjectInfo,
+	cwd: string,
+): string | null {
+	if (!info.isWorkspace || !info.members || info.members.length === 0) return null
+
+	const symbolIndex = CangjieSymbolIndex.getInstance()
+	if (!symbolIndex || symbolIndex.symbolCount === 0) return null
+
+	const MAX_SYMBOLS_PER_MODULE = 20
+	const moduleSections: string[] = []
+
+	for (const member of info.members) {
+		const memberSrcDir = path.join(cwd, member.path, "src")
+		if (!fs.existsSync(memberSrcDir)) continue
+
+		const symbols = symbolIndex.getSymbolsByDirectory(memberSrcDir)
+		if (symbols.length === 0) continue
+
+		const topLevel = symbols
+			.filter((s) => ["class", "struct", "interface", "enum", "func", "type"].includes(s.kind))
+			.slice(0, MAX_SYMBOLS_PER_MODULE)
+
+		if (topLevel.length === 0) continue
+
+		const lines = topLevel.map((s) => {
+			const sig = s.signature ? `: \`${s.signature}\`` : ""
+			return `  - ${s.kind} **${s.name}**${sig}`
+		})
+
+		const suffix = symbols.length > MAX_SYMBOLS_PER_MODULE
+			? `\n  - _…共 ${symbols.length} 个符号_`
+			: ""
+
+		moduleSections.push(`- **${member.name}** (${member.outputType}):\n${lines.join("\n")}${suffix}`)
+	}
+
+	if (moduleSections.length === 0) return null
+
+	return (
+		`## 工作区各模块公共符号\n\n` +
+		`以下是各模块的主要类型和函数定义，跨模块引用时需确保目标符号为 public 并在 cjpm.toml 中声明依赖：\n\n` +
+		moduleSections.join("\n\n")
+	)
 }
 
 /**
@@ -780,16 +1076,29 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 		sections.push(formatProjectInfoSection(projectInfo))
 	}
 
-	// 0b. Package hierarchy context
+	// 0b. Package hierarchy context + package declaration verification
 	if (projectInfo && !projectInfo.isWorkspace) {
 		const rootPkgName = projectInfo.name || undefined
 		const pkgTree = scanPackageHierarchy(cwd, projectInfo.srcDir, rootPkgName)
 		if (pkgTree) {
 			sections.push(formatPackageTreeSection(pkgTree, projectInfo))
+
+			const pkgMismatches = verifyPackageDeclarations(pkgTree, cwd, projectInfo.srcDir)
+			if (pkgMismatches) sections.push(pkgMismatches)
 		}
 	} else if (projectInfo && projectInfo.isWorkspace) {
 		const modulesSection = formatWorkspaceModulesSection(projectInfo, cwd)
 		if (modulesSection) sections.push(modulesSection)
+
+		// Verify package declarations for each workspace member
+		for (const member of projectInfo.members || []) {
+			const memberCwd = path.join(cwd, member.path)
+			const memberTree = scanPackageHierarchy(memberCwd, "src", member.name)
+			if (memberTree) {
+				const pkgMismatches = verifyPackageDeclarations(memberTree, memberCwd, "src")
+				if (pkgMismatches) sections.push(pkgMismatches)
+			}
+		}
 	}
 
 	// 0c. Dependency context (workspace only)
@@ -798,8 +1107,27 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 		if (depCtx) sections.push(depCtx)
 	}
 
-	// 1. Import-based documentation context
+	// 0d. Active file symbol definitions
+	const symbolSection = collectActiveCangjieSymbols()
+	if (symbolSection) {
+		sections.push(symbolSection)
+	}
+
+	// 0e. Cross-file symbol resolution via import analysis
 	const imports = collectActiveCangjieImports()
+
+	const importedSymbolsSection = resolveImportedSymbols(imports, cwd, projectInfo)
+	if (importedSymbolsSection) {
+		sections.push(importedSymbolsSection)
+	}
+
+	// 0f. Workspace cross-module symbol summary
+	if (projectInfo?.isWorkspace) {
+		const wsSymbols = buildWorkspaceSymbolSummary(projectInfo, cwd)
+		if (wsSymbols) sections.push(wsSymbols)
+	}
+
+	// 1. Import-based documentation context
 	if (imports.length > 0 && docsExist) {
 		const docMappings = mapImportsToDocPaths(imports)
 		if (docMappings.length > 0) {
@@ -846,6 +1174,12 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 	// 5. Code review checklist
 	sections.push(CODE_REVIEW_CHECKLIST)
 
+	// 6. Structured editing context (cursor position, enclosing symbol, nearby code)
+	const editingCtx = buildStructuredEditingContext()
+	if (editingCtx) {
+		sections.push(editingCtx)
+	}
+
 	if (sections.length === 0) return ""
 
 	return `====
@@ -857,13 +1191,59 @@ ${sections.join("\n\n")}
 }
 
 /**
+ * Extract file:line:col references from cjc error output and read surrounding
+ * source lines to provide richer context for AI-assisted fixes.
+ */
+function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
+	const locationRe = /==>\s+(.+?):(\d+):(\d+):/g
+	const contextLines: string[] = []
+	const seen = new Set<string>()
+	const CONTEXT_RADIUS = 3
+	let match: RegExpExecArray | null
+
+	while ((match = locationRe.exec(errorOutput)) !== null) {
+		const [, filePart, lineStr] = match
+		const lineNum = parseInt(lineStr, 10) - 1
+		const filePath = path.isAbsolute(filePart) ? filePart : path.resolve(cwd, filePart)
+		const key = `${filePath}:${lineNum}`
+		if (seen.has(key)) continue
+		seen.add(key)
+
+		try {
+			if (!fs.existsSync(filePath)) continue
+			const content = fs.readFileSync(filePath, "utf-8")
+			const lines = content.split("\n")
+			const start = Math.max(0, lineNum - CONTEXT_RADIUS)
+			const end = Math.min(lines.length, lineNum + CONTEXT_RADIUS + 1)
+
+			const snippet = lines
+				.slice(start, end)
+				.map((l, i) => {
+					const num = start + i + 1
+					const marker = num === lineNum + 1 ? " >>>" : "    "
+					return `${marker} ${num}: ${l}`
+				})
+				.join("\n")
+
+			const relPath = path.relative(cwd, filePath).replace(/\\/g, "/")
+			contextLines.push(`文件: ${relPath} (第 ${lineNum + 1} 行)\n${snippet}`)
+		} catch {
+			// Skip unreadable files
+		}
+
+		if (contextLines.length >= 3) break
+	}
+
+	return contextLines
+}
+
+/**
  * Enhance a cjc/cjlint error message with documentation references and fix suggestions.
  * Called when terminal output contains compilation errors.
  */
 export function enhanceCjcErrorOutput(errorOutput: string, cwd: string): string {
 	const docsBase = resolveDocsBasePath(cwd)
 	const docsExist = fs.existsSync(docsBase)
-	if (!docsExist) return ""
 
 	const matchedSuggestions: string[] = []
 	const seen = new Set<string>()
@@ -871,17 +1251,148 @@ export function enhanceCjcErrorOutput(errorOutput: string, cwd: string): string 
 	for (const pattern of CJC_ERROR_PATTERNS) {
 		if (pattern.pattern.test(errorOutput) && !seen.has(pattern.category)) {
 			seen.add(pattern.category)
-			const docPaths = pattern.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
-			matchedSuggestions.push(
-				`[${pattern.category}] ${pattern.suggestion} (参考: ${docPaths})`,
-			)
+			const docPaths = docsExist
+				? pattern.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
+				: ""
+			const ref = docPaths ? ` (参考: ${docPaths})` : ""
+			const directive = getErrorFixDirective(errorOutput)
+			matchedSuggestions.push(`[${pattern.category}] ${pattern.suggestion}${ref}\n  AI 修复指令: ${directive}`)
 		}
 	}
 
-	if (matchedSuggestions.length === 0) return ""
+	const sourceContexts = extractErrorSourceContext(errorOutput, cwd)
 
-	return `\n\n<cangjie_error_hints>\n${matchedSuggestions.join("\n")}\n</cangjie_error_hints>`
+	if (matchedSuggestions.length === 0 && sourceContexts.length === 0) return ""
+
+	const parts: string[] = []
+	if (sourceContexts.length > 0) {
+		parts.push(`出错位置源码:\n${sourceContexts.join("\n\n")}`)
+	}
+	if (matchedSuggestions.length > 0) {
+		parts.push(matchedSuggestions.join("\n"))
+	}
+
+	return `\n\n<cangjie_error_hints>\n${parts.join("\n\n")}\n</cangjie_error_hints>`
+}
+
+// ---------------------------------------------------------------------------
+// Error-classified AI fix directives
+// ---------------------------------------------------------------------------
+
+interface ErrorFixDirective {
+	pattern: RegExp
+	directive: string
+}
+
+const ERROR_FIX_DIRECTIVES: ErrorFixDirective[] = [
+	{ pattern: /unused\s+(?:variable|import|parameter)/i, directive: "移除未使用的变量/导入/参数" },
+	{ pattern: /(?:cannot find|undeclared|unresolved|not found|未找到符号)/i, directive: "检查是否缺少 import 语句或拼写错误。如果是标准库符号，添加正确的 import（如 `import std.collection.*`）" },
+	{ pattern: /(?:type mismatch|incompatible types|类型不匹配)/i, directive: "使类型一致：修改变量类型、添加显式类型转换、或调整函数返回类型" },
+	{ pattern: /(?:immutable|cannot assign|let.*reassign|不可变)/i, directive: "将 `let` 改为 `var`，或重构为不需要重新赋值的模式" },
+	{ pattern: /(?:non-exhaustive|incomplete match|未穷尽)/i, directive: "为 match 表达式添加缺失的分支或 `case _ =>` 通配分支" },
+	{ pattern: /(?:missing return|no return|缺少返回)/i, directive: "确保函数所有分支都有返回值，或在函数末尾添加返回语句" },
+	{ pattern: /(?:not implement|missing implementation|未实现接口)/i, directive: "实现缺失的接口方法，确保方法签名完全匹配" },
+	{ pattern: /(?:access.*denied|private|not accessible|访问权限)/i, directive: "检查访问修饰符，跨包使用需要 `public`" },
+	{ pattern: /(?:cyclic dependency|循环依赖)/i, directive: "将共享类型抽取到独立包中以打破循环依赖" },
+	{ pattern: /(?:duplicate.*definition|redefinition|重复定义)/i, directive: "移除重复定义，或为同名符号使用不同的名称" },
+	{ pattern: /(?:syntax error|unexpected token|语法错误)/i, directive: "检查括号/花括号匹配，确保语句完整。注意仓颉不使用分号结尾" },
+	{ pattern: /(?:override.*missing|must.*override)/i, directive: "在重写的方法前添加 `override` 关键字" },
+	{ pattern: /(?:wrong number.*argument|too (?:many|few) argument|参数数量)/i, directive: "调整函数调用的参数数量或顺序以匹配函数声明" },
+	{ pattern: /(?:constraint.*not satisfied|does not conform|泛型约束)/i, directive: "确保类型参数满足 where 子句中的约束" },
+	{ pattern: /(?:mut function|mut.*let)/i, directive: "将 `let` 改为 `var` 以允许调用 mut 方法" },
+	{ pattern: /(?:capture.*mutable|spawn.*var|并发.*可变)/i, directive: "使用 Mutex 或 AtomicReference 包装共享可变状态" },
+]
+
+/**
+ * Given an error message, return a specific fix directive for the AI,
+ * or a generic one if no pattern matches.
+ */
+export function getErrorFixDirective(errorMessage: string): string {
+	for (const { pattern, directive } of ERROR_FIX_DIRECTIVES) {
+		if (pattern.test(errorMessage)) {
+			return directive
+		}
+	}
+	return "分析错误原因并给出最小化修复方案"
+}
+
+// ---------------------------------------------------------------------------
+// Structured AI editing context
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a structured editing context for the AI when the user is actively
+ * editing a Cangjie file. Includes file info, current function, imports,
+ * and recent diagnostics.
+ */
+export function buildStructuredEditingContext(): string | null {
+	const editor = vscode.window.activeTextEditor
+	if (!editor || (editor.document.languageId !== "cangjie" && !editor.document.fileName.endsWith(".cj"))) {
+		return null
+	}
+
+	const doc = editor.document
+	const cursorLine = editor.selection.active.line
+	const content = doc.getText()
+	const defs = parseCangjieDefinitions(content)
+
+	const parts: string[] = []
+
+	// File info
+	const fileName = path.basename(doc.fileName)
+	parts.push(`当前文件: ${fileName}`)
+
+	// Imports
+	const imports = extractImports(content)
+	if (imports.length > 0) {
+		parts.push(`已导入: ${imports.slice(0, 10).join(", ")}${imports.length > 10 ? " …" : ""}`)
+	}
+
+	// Current function/class context
+	const enclosing = defs
+		.filter((d: CangjieDef) => d.startLine <= cursorLine && d.endLine >= cursorLine && d.kind !== "import" && d.kind !== "package")
+		.sort((a: CangjieDef, b: CangjieDef) => (b.startLine - a.startLine))
+
+	if (enclosing.length > 0) {
+		const innermost = enclosing[0]
+		const sigLine = doc.lineAt(innermost.startLine).text.trim()
+		parts.push(`正在编辑: ${innermost.kind} ${innermost.name} (第 ${innermost.startLine + 1} 行)`)
+		parts.push(`签名: ${sigLine}`)
+	}
+
+	// Nearby code (±5 lines around cursor)
+	const startLine = Math.max(0, cursorLine - 5)
+	const endLine = Math.min(doc.lineCount - 1, cursorLine + 5)
+	const nearbyLines: string[] = []
+	for (let i = startLine; i <= endLine; i++) {
+		const marker = i === cursorLine ? " >>>" : "    "
+		nearbyLines.push(`${marker} ${i + 1}: ${doc.lineAt(i).text}`)
+	}
+	parts.push(`附近代码:\n${nearbyLines.join("\n")}`)
+
+	// Active diagnostics for this file
+	const diags = vscode.languages.getDiagnostics(doc.uri)
+	const errors = diags.filter((d) => d.severity === vscode.DiagnosticSeverity.Error)
+	if (errors.length > 0) {
+		const errorSummary = errors.slice(0, 5).map((d) => {
+			const directive = getErrorFixDirective(d.message)
+			return `  - 第 ${d.range.start.line + 1} 行: ${d.message}\n    建议: ${directive}`
+		}).join("\n")
+		parts.push(`当前文件错误:\n${errorSummary}`)
+	}
+
+	return `## 当前编辑上下文\n\n${parts.join("\n")}`
 }
 
 // Re-export for testing
-export { extractImports, mapImportsToDocPaths, CJC_ERROR_PATTERNS, STDLIB_DOC_MAP, parseCjpmToml, scanPackageHierarchy }
+export {
+	extractImports,
+	mapImportsToDocPaths,
+	CJC_ERROR_PATTERNS,
+	STDLIB_DOC_MAP,
+	parseCjpmToml,
+	scanPackageHierarchy,
+	resolveImportedSymbols,
+	verifyPackageDeclarations,
+	buildWorkspaceSymbolSummary,
+}

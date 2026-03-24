@@ -3,17 +3,8 @@ import styled from "styled-components"
 // Keep StyledMarkdown as it's used by ModelDescriptionMarkdown.tsx
 export const StyledMarkdown = styled.div`
 	font-family:
+		var(--roo-font-body, var(--roo-font-serif)),
 		var(--vscode-font-family),
-		system-ui,
-		-apple-system,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		Roboto,
-		Oxygen,
-		Ubuntu,
-		Cantarell,
-		"Open Sans",
-		"Helvetica Neue",
 		sans-serif;
 	font-size: 12px;
 	color: var(--vscode-descriptionForeground);

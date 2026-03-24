@@ -1,0 +1,19 @@
+{
+	"mcpServers": {
+		"cangjie-sdk": {
+			"disabled": false,
+			"timeout": 120,
+			"type": "stdio",
+			"command": "node",
+			"args": [
+				"C:/path/to/your/cangjie-mcp-server/index.js"
+			],
+			"env": {
+				"CANGJIE_HOME": "C:/cangjie",
+				"PATH": "C:/cangjie/bin;${env:PATH}"
+			},
+			"alwaysAllow": [],
+			"disabledTools": []
+		}
+	}
+}

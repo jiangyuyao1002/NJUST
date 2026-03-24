@@ -811,9 +811,19 @@
 					"default": "",
 					"description": "Path to the cjpm project manager. Leave empty to auto-detect from CANGJIE_HOME or PATH."
 				},
+			"njust-ai-cj.cloudAgent.serverUrl": {
+				"type": "string",
+				"default": "http://120.79.250.232:8765",
+				"description": "Cloud Agent service endpoint. Pre-configured — no change needed for normal use."
+			},
+			"njust-ai-cj.cloudAgent.deviceToken": {
+				"type": "string",
+				"default": "",
+				"description": "Auto-generated device token for Cloud Agent authentication. Do not modify manually."
+			},
 			"njust-ai-cj.mcpServer.enabled": {
 				"type": "boolean",
-				"default": false,
+				"default": true,
 				"description": "Enable the built-in MCP Tools Server, allowing external agents to call internal tools (read/write files, execute commands, search, etc.) via the MCP protocol over HTTP."
 			},
 			"njust-ai-cj.mcpServer.port": {
@@ -823,10 +833,20 @@
 				"maximum": 65535,
 				"description": "Port number for the MCP Tools Server (requires restart after change)."
 			},
+			"njust-ai-cj.mcpServer.bindAddress": {
+				"type": "string",
+				"default": "127.0.0.1",
+				"enum": ["127.0.0.1", "0.0.0.0"],
+				"enumDescriptions": [
+					"Localhost only — accessible from this machine only (safe default)",
+					"All interfaces — accessible from remote machines (requires authToken)"
+				],
+				"description": "Network address for the MCP Tools Server to bind to. Use '0.0.0.0' to allow remote agents (cloud-deployed) to connect. Requires authToken when set to '0.0.0.0'. Requires restart after change."
+			},
 			"njust-ai-cj.mcpServer.authToken": {
 				"type": "string",
 				"default": "",
-				"description": "Optional Bearer token for authenticating MCP Tools Server requests. Leave empty to disable authentication (only recommended for local development)."
+				"description": "Bearer token for authenticating MCP Tools Server requests. REQUIRED when bindAddress is '0.0.0.0'. Leave empty to disable authentication (only for local-only access)."
 			},
 			"njust-ai-cj.debug": {
 				"type": "boolean",

@@ -40,8 +40,9 @@
 		"prompts": "Prompts",
 		"ui": "UI",
 		"experimental": "Experimental",
-		"language": "Language",
-		"about": "About NJUST_AI_CJ"
+		"appearance": "Appearance",
+		"about": "About NJUST_AI_CJ",
+		"webSearch": "Web Search"
 	},
 	"about": {
 		"bugReport": {
@@ -155,6 +156,19 @@
 		},
 		"footer": "Create your own skills with the Skill Writer mode, available in the <MarketplaceLink>Modes Marketplace</MarketplaceLink>.",
 		"footerSimple": "Create your own skills with the Skill Writer mode."
+	},
+	"appearance": {
+		"language": {
+			"label": "Language",
+			"description": "Select display language"
+		},
+		"fontFamily": {
+			"label": "Font",
+			"description": "Select UI font style",
+			"serif": "Serif (Song Ti)",
+			"sans-serif": "Sans-serif (Hei Ti)",
+			"default": "System Default"
+		}
 	},
 	"ui": {
 		"collapseThinking": {
@@ -1014,5 +1028,30 @@
 			"output": "Output",
 			"cacheReads": "Cache reads"
 		}
+	},
+	"webSearch": {
+		"enable": {
+			"label": "Enable Web Search",
+			"description": "When enabled, the AI assistant can search the web for real-time information using the web_search tool."
+		},
+		"provider": {
+			"label": "Search Engine",
+			"description": "Select which search engine to use for web search."
+		},
+		"serpApiEngine": {
+			"label": "SerpAPI Search Engine",
+			"description": "Select the underlying search engine for SerpAPI to use."
+		},
+		"apiKey": {
+			"label": "API Key"
+		},
+		"apiKeyHint": {
+			"tavily": "Get a free API key at https://tavily.com",
+			"bing": "Get a key from Azure Portal → Bing Search v7 resource",
+			"google": "Format: API_KEY|SEARCH_ENGINE_ID (from Google Cloud Console + Programmable Search Engine)",
+			"baidu": "Get an access token from Baidu AI Cloud (百度智能云)",
+			"serpapi": "Get an API key at https://serpapi.com (supports Google, Bing, Baidu, etc.)"
+		},
+		"noKeyRequired": "This search engine is completely free and does not require an API key. Just enable web search and start using it!"
 	}
 }

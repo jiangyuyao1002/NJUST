@@ -171,6 +171,14 @@
 	"sendMessage": "Send message",
 	"pressToSend": "Press {{keyCombination}} to send",
 	"stopTts": "Stop text-to-speech",
+	"webSearch": {
+		"label": "Web",
+		"enable": "Enable web search",
+		"disable": "Disable web search",
+		"testing": "Testing web search connection...",
+		"statusOk": "Web search is available",
+		"statusError": "Web search unavailable"
+	},
 	"typeMessage": "Type a message...",
 	"typeTask": "Type your task here...",
 	"addContext": "@ to add context, / for commands",

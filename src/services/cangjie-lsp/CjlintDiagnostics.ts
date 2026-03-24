@@ -8,6 +8,8 @@ import { resolveCangjieToolPath, buildCangjieToolEnv } from "./cangjieToolUtils"
 
 const execFileAsync = promisify(execFile)
 
+const DEBOUNCE_MS = 1500
+
 interface CjlintEntry {
 	defect_id?: string
 	rule_id?: string
@@ -26,6 +28,7 @@ export class CjlintDiagnostics implements vscode.Disposable {
 	private diagnosticCollection: vscode.DiagnosticCollection
 	private disposables: vscode.Disposable[] = []
 	private running = false
+	private debounceTimer: ReturnType<typeof setTimeout> | undefined
 
 	constructor(private readonly outputChannel: vscode.OutputChannel) {
 		this.diagnosticCollection = vscode.languages.createDiagnosticCollection("cjlint")
@@ -34,7 +37,7 @@ export class CjlintDiagnostics implements vscode.Disposable {
 		this.disposables.push(
 			vscode.workspace.onDidSaveTextDocument((doc) => {
 				if (doc.languageId === "cangjie") {
-					void this.lintWorkspace()
+					this.debouncedLint(doc.uri)
 				}
 			}),
 		)
@@ -42,15 +45,87 @@ export class CjlintDiagnostics implements vscode.Disposable {
 		this.disposables.push(
 			vscode.workspace.onDidOpenTextDocument((doc) => {
 				if (doc.languageId === "cangjie") {
-					void this.lintWorkspace()
+					this.debouncedLint(doc.uri)
 				}
 			}),
 		)
 	}
 
+	private debouncedLint(changedUri?: vscode.Uri): void {
+		if (this.debounceTimer) {
+			clearTimeout(this.debounceTimer)
+		}
+		this.debounceTimer = setTimeout(() => {
+			this.debounceTimer = undefined
+			if (changedUri) {
+				void this.lintSingleFile(changedUri)
+			} else {
+				void this.lintWorkspace()
+			}
+		}, DEBOUNCE_MS)
+	}
+
+	/**
+	 * Lint a single file instead of the entire workspace.
+	 * Falls back to workspace lint if the file path cannot be resolved.
+	 */
+	async lintSingleFile(uri: vscode.Uri): Promise<void> {
+		if (this.running) return
+		this.running = true
+		const t0 = Date.now()
+
+		try {
+			const cjlintPath = resolveCangjieToolPath("cjlint", "cangjieTools.cjlintPath")
+			if (!cjlintPath) return
+
+			const filePath = uri.fsPath
+			if (!fs.existsSync(filePath)) return
+
+			const folder = vscode.workspace.getWorkspaceFolder(uri)
+			const cwd = folder?.uri.fsPath || path.dirname(filePath)
+			const tmpReport = path.join(os.tmpdir(), `cjlint_single_${Date.now()}`)
+
+			try {
+				await execFileAsync(
+					cjlintPath,
+					["-f", filePath, "-r", "json", "-o", tmpReport],
+					{ timeout: 30_000, cwd, env: buildCangjieToolEnv() as NodeJS.ProcessEnv },
+				)
+			} catch {
+				// cjlint may exit with non-zero when issues are found
+			}
+
+			const allDiagnostics = new Map<string, vscode.Diagnostic[]>()
+			const reportPath = `${tmpReport}.json`
+
+			if (fs.existsSync(reportPath)) {
+				this.parseReport(reportPath, cwd, allDiagnostics)
+				try { fs.unlinkSync(reportPath) } catch {}
+			} else if (fs.existsSync(tmpReport)) {
+				this.parseReport(tmpReport, cwd, allDiagnostics)
+			}
+			try { fs.unlinkSync(tmpReport) } catch {}
+
+			const normalized = path.resolve(filePath)
+			const fileDiags = allDiagnostics.get(normalized) || []
+			const deduplicated = this.deduplicateWithLsp(uri, fileDiags)
+			this.diagnosticCollection.set(uri, deduplicated)
+
+			this.outputChannel.appendLine(
+				`[Perf] cjlint single-file scan completed in ${Date.now() - t0}ms (${path.basename(filePath)})`,
+			)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			this.outputChannel.appendLine(`[CjLint] Error (single file): ${message}`)
+		} finally {
+			this.running = false
+		}
+	}
+
 	async lintWorkspace(): Promise<void> {
 		if (this.running) return
 		this.running = true
+		const t0 = Date.now()
 
 		try {
 			const cjlintPath = resolveCangjieToolPath("cjlint", "cangjieTools.cjlintPath")
@@ -84,7 +159,6 @@ export class CjlintDiagnostics implements vscode.Disposable {
 
 				const reportPath = `${tmpReport}.json`
 				if (!fs.existsSync(reportPath)) {
-					// Try without extension
 					if (fs.existsSync(tmpReport)) {
 						this.parseReport(tmpReport, folder.uri.fsPath, allDiagnostics)
 					}
@@ -99,14 +173,38 @@ export class CjlintDiagnostics implements vscode.Disposable {
 
 			for (const [filePath, diagnostics] of allDiagnostics) {
 				const uri = vscode.Uri.file(filePath)
-				this.diagnosticCollection.set(uri, diagnostics)
+				const deduplicated = this.deduplicateWithLsp(uri, diagnostics)
+				this.diagnosticCollection.set(uri, deduplicated)
 			}
+
+			this.outputChannel.appendLine(
+				`[Perf] cjlint workspace scan completed in ${Date.now() - t0}ms (${allDiagnostics.size} files)`,
+			)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			this.outputChannel.appendLine(`[CjLint] Error: ${message}`)
 		} finally {
 			this.running = false
 		}
+	}
+
+	/**
+	 * Filter out cjlint diagnostics that overlap with LSP diagnostics
+	 * on the same line with similar message content.
+	 */
+	private deduplicateWithLsp(uri: vscode.Uri, cjlintDiags: vscode.Diagnostic[]): vscode.Diagnostic[] {
+		const allExisting = vscode.languages.getDiagnostics(uri)
+		const lspDiags = allExisting.filter((d) => d.source !== "cjlint")
+
+		if (lspDiags.length === 0) return cjlintDiags
+
+		return cjlintDiags.filter((cjd) => {
+			return !lspDiags.some((lspd) =>
+				lspd.range.start.line === cjd.range.start.line &&
+				(lspd.message.includes(cjd.message.replace(/^\[.*?\]\s*/, "")) ||
+				 cjd.message.replace(/^\[.*?\]\s*/, "").includes(lspd.message)),
+			)
+		})
 	}
 
 	private parseReport(
@@ -172,6 +270,9 @@ export class CjlintDiagnostics implements vscode.Disposable {
 	}
 
 	dispose(): void {
+		if (this.debounceTimer) {
+			clearTimeout(this.debounceTimer)
+		}
 		this.disposables.forEach((d) => d.dispose())
 	}
 }

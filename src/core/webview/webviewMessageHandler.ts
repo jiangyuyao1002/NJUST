@@ -2629,6 +2629,30 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			await handleOpenSkillFile(provider, message)
 			break
 		}
+		case "testWebSearch": {
+			try {
+				const state = await provider.getState()
+				const providerName = state?.webSearchProvider ?? "baidu-free"
+				const apiKey = state?.webSearchApiKey ?? ""
+				const serpApiEngine = state?.serpApiEngine ?? "bing"
+
+				const { createSearchProvider } = await import("../../services/web-search/WebSearchProvider")
+				const searchProvider = createSearchProvider(providerName as any, apiKey, serpApiEngine as any)
+
+				await searchProvider.search("test", 1)
+				await provider.postMessageToWebview({
+					type: "webSearchStatus",
+					text: JSON.stringify({ status: "ok", provider: providerName }),
+				})
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error)
+				await provider.postMessageToWebview({
+					type: "webSearchStatus",
+					text: JSON.stringify({ status: "error", message: msg }),
+				})
+			}
+			break
+		}
 		case "openCommandFile": {
 			try {
 				if (message.text) {

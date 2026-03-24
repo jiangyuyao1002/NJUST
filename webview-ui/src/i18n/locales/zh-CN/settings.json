@@ -39,9 +39,10 @@
 		"prompts": "提示词",
 		"ui": "UI",
 		"experimental": "实验性",
-		"language": "语言",
+		"appearance": "外观",
 		"about": "关于 NJUST_AI_CJ",
-		"skills": "Skills"
+		"skills": "Skills",
+		"webSearch": "联网搜索"
 	},
 	"about": {
 		"bugReport": {
@@ -951,6 +952,19 @@
 			"cacheReads": "缓存读取"
 		}
 	},
+	"appearance": {
+		"language": {
+			"label": "语言",
+			"description": "选择界面显示语言"
+		},
+		"fontFamily": {
+			"label": "字体",
+			"description": "选择界面字体风格",
+			"serif": "宋体 (衬线体)",
+			"sans-serif": "黑体 (无衬线体)",
+			"default": "系统默认"
+		}
+	},
 	"ui": {
 		"collapseThinking": {
 			"label": "默认折叠「思考」消息",
@@ -1014,5 +1028,30 @@
 		},
 		"footer": "使用技能编写器模式创建您自己的技能，可在 <MarketplaceLink>模式市集</MarketplaceLink> 中获得。",
 		"footerSimple": "使用技能编写器模式创建您自己的技能。"
+	},
+	"webSearch": {
+		"enable": {
+			"label": "启用联网搜索",
+			"description": "启用后，AI 助手可以使用 web_search 工具搜索互联网获取实时信息。"
+		},
+		"provider": {
+			"label": "搜索引擎",
+			"description": "选择用于联网搜索的搜索引擎。"
+		},
+		"serpApiEngine": {
+			"label": "SerpAPI 搜索引擎",
+			"description": "选择 SerpAPI 使用的底层搜索引擎。"
+		},
+		"apiKey": {
+			"label": "API 密钥"
+		},
+		"apiKeyHint": {
+			"tavily": "前往 https://tavily.com 获取免费 API Key",
+			"bing": "在 Azure 门户创建 Bing Search v7 资源获取密钥",
+			"google": "格式：API_KEY|搜索引擎ID（需在 Google Cloud Console + 可编程搜索引擎 中创建）",
+			"baidu": "前往百度智能云获取 Access Token",
+			"serpapi": "前往 https://serpapi.com 获取 API Key（支持 Google、Bing、百度等多引擎）"
+		},
+		"noKeyRequired": "该搜索引擎完全免费，无需 API 密钥。开启联网搜索即可直接使用！"
 	}
 }

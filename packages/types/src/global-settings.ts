@@ -186,6 +186,7 @@ export const globalSettingsSchema = z.object({
 	codebaseIndexConfig: codebaseIndexConfigSchema.optional(),
 
 	language: languagesSchema.optional(),
+	fontFamily: z.enum(["serif", "sans-serif", "default"]).optional(),
 
 	mcpEnabled: z.boolean().optional(),
 
@@ -231,6 +232,8 @@ export const globalSettingsSchema = z.object({
 	disabledTools: z.array(toolNamesSchema).optional(),
 
 	enableWebSearch: z.boolean().optional(),
+	webSearchProvider: z.enum(["baidu-free", "duckduckgo", "tavily", "bing", "google", "baidu", "serpapi"]).optional(),
+	serpApiEngine: z.enum(["bing", "google", "baidu", "yandex", "yahoo", "duckduckgo"]).optional(),
 	webSearchApiKey: z.string().optional(),
 })
 
@@ -371,6 +374,7 @@ export const EVALS_SETTINGS: NJUST_AI_CJSettings = {
 	maxDiagnosticMessages: 50,
 
 	language: "en",
+	fontFamily: "serif",
 
 	mcpEnabled: false,
 

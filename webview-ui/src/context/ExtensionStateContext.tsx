@@ -199,7 +199,12 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		ttsSpeed: 1.0,
 		enableCheckpoints: true,
 		checkpointTimeout: DEFAULT_CHECKPOINT_TIMEOUT_SECONDS, // Default to 15 seconds
-		language: "en", // Default language code
+		enableWebSearch: false,
+		webSearchProvider: "baidu-free",
+		serpApiEngine: "bing",
+		webSearchApiKey: "",
+		language: "en",
+		fontFamily: "serif",
 		writeDelayMs: 1000,
 		terminalShellIntegrationTimeout: 4000,
 		mcpEnabled: true,
