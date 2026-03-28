@@ -3,7 +3,7 @@
 	"displayName": "NJUST_AI_CJ",
 	"description": "AI-powered coding assistant for NJUST",
 	"publisher": "JunjieChen-YuyaoJiang",
-	"version": "2026.3.27",
+	"version": "2026.3.28",
 	"icon": "assets/icons/icon.png",
 	"galleryBanner": {
 		"color": "#617A91",
@@ -813,7 +813,7 @@
 				},
 				"njust-ai-cj.cloudAgent.serverUrl": {
 					"type": "string",
-					"default": "http://114.55.53.194:8080",
+					"default": "http://120.79.250.232:8765",
 					"description": "Cloud Agent REST base URL (GET /health, POST /v1/run). Override for a custom deployment or local mock (e.g. http://127.0.0.1:4000)."
 				},
 				"njust-ai-cj.cloudAgent.deviceToken": {
@@ -823,7 +823,7 @@
 				},
 				"njust-ai-cj.cloudAgent.apiKey": {
 					"type": "string",
-					"default": "@Njust123456",
+					"default": "X-20060507012610261002",
 					"description": "X-API-Key for Cloud Agent (must match server CLOUD_AGENT_MOCK_API_KEY). A default is bundled for zero-configuration installs; clear or override for your own server. Keys ship inside the VSIX—do not treat as a secret for public distribution; prefer unsetting CLOUD_AGENT_MOCK_API_KEY on the server and using network controls, or rotate after releases."
 				},
 				"njust-ai-cj.cloudAgent.requestTimeoutMs": {
