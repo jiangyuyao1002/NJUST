@@ -1,4 +1,22 @@
-import { doubaoModels, doubaoDefaultModelId, type ModelInfo } from "@njust-ai-cj/types"
+import {
+	doubaoCodingPlanBaseUrl,
+	doubaoDefaultBaseUrl,
+	doubaoModels,
+	doubaoDefaultModelId,
+	doubaoSeedCodeCodingPlanModelId,
+	openAiModelInfoSaneDefaults,
+	resolveDoubaoInferenceModelId,
+	type ModelInfo,
+} from "@njust-ai-cj/types"
+
+/** 用户自填 ep- / 控制台 Model ID 时的能力占位（定价以控制台为准） */
+const doubaoCustomModelInfo: ModelInfo = {
+	...openAiModelInfoSaneDefaults,
+	maxTokens: 32_768,
+	contextWindow: 262_144,
+	supportsImages: true,
+	supportsPromptCache: false,
+}
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
@@ -7,16 +25,31 @@ import { getModelParams } from "../transform/model-params"
 
 import { OpenAICompatibleHandler, OpenAICompatibleConfig } from "./openai-compatible"
 
+function trimTrailingSlash(url: string): string {
+	return url.replace(/\/+$/, "")
+}
+
 export class DoubaoHandler extends OpenAICompatibleHandler {
 	constructor(options: ApiHandlerOptions) {
-		const modelId = options.apiModelId ?? doubaoDefaultModelId
-		const modelInfo = doubaoModels[modelId as keyof typeof doubaoModels] || doubaoModels[doubaoDefaultModelId]
+		const catalogModelId = options.apiModelId ?? doubaoDefaultModelId
+		const modelInfo =
+			doubaoModels[catalogModelId as keyof typeof doubaoModels] ?? doubaoCustomModelInfo
+
+		const userBase = (options.doubaoBaseUrl ?? "").trim()
+		const effectiveBaseUrl = userBase || doubaoDefaultBaseUrl
+		// 仅当用户显式把 Base 设为 Coding Plan 地址时走 ark-code-latest；默认按量 /api/v3 勿自动切套餐，否则会报无订阅
+		const usingCodingPlanEndpoint =
+			trimTrailingSlash(effectiveBaseUrl) === trimTrailingSlash(doubaoCodingPlanBaseUrl)
+		const inferenceModelId =
+			catalogModelId === "doubao-seed-code" && usingCodingPlanEndpoint
+				? doubaoSeedCodeCodingPlanModelId
+				: resolveDoubaoInferenceModelId(catalogModelId)
 
 		const config: OpenAICompatibleConfig = {
 			providerName: "doubao",
-			baseURL: options.doubaoBaseUrl || "https://ark.cn-beijing.volces.com/api/v3",
+			baseURL: effectiveBaseUrl,
 			apiKey: options.doubaoApiKey ?? "not-provided",
-			modelId,
+			modelId: inferenceModelId,
 			modelInfo,
 			modelMaxTokens: options.modelMaxTokens ?? undefined,
 			temperature: options.modelTemperature ?? undefined,
@@ -27,7 +60,7 @@ export class DoubaoHandler extends OpenAICompatibleHandler {
 
 	override getModel() {
 		const id = this.options.apiModelId ?? doubaoDefaultModelId
-		const info = doubaoModels[id as keyof typeof doubaoModels] || doubaoModels[doubaoDefaultModelId]
+		const info = doubaoModels[id as keyof typeof doubaoModels] ?? doubaoCustomModelInfo
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,

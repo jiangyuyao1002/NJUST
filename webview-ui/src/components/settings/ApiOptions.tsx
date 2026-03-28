@@ -418,7 +418,7 @@ const ApiOptions = ({
 			requesty: "https://docs.requesty.ai",
 			"qwen-code": "https://help.aliyun.com/zh/model-studio/",
 			qwen: "https://help.aliyun.com/zh/model-studio/",
-			doubao: "https://www.volcengine.com/docs/82379",
+			doubao: "https://www.volcengine.com/docs/82379/1330626",
 			glm: "https://open.bigmodel.cn/dev/api",
 			moonshot: "https://platform.moonshot.cn/docs",
 			minimax: "https://platform.minimaxi.com/document",
@@ -759,6 +759,7 @@ const ApiOptions = ({
 								organizationAllowList={organizationAllowList}
 								errorMessage={modelValidationError}
 								simplifySettings={fromWelcomeView}
+								showDirectModelIdInput={activeSelectedProvider === "doubao"}
 								onModelChange={(modelId) =>
 									handleModelChangeSideEffects(
 										activeSelectedProvider,

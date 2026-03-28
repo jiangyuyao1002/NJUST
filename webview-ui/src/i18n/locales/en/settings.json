@@ -939,7 +939,9 @@
 		"searchPlaceholder": "Search",
 		"noMatchFound": "No match found",
 		"useCustomModel": "Use custom: {{modelId}}",
-		"simplifiedExplanation": "You can adjust detailed model settings later."
+		"simplifiedExplanation": "You can adjust detailed model settings later.",
+		"directModelIdLabel": "Model ID (optional)",
+		"directModelIdPlaceholder": "e.g. ep-… or console Model ID (same field as the picker above)"
 	},
 	"footer": {
 		"telemetry": {

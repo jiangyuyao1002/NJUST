@@ -92,3 +92,40 @@ export const doubaoModels = {
 } as const satisfies Record<string, ModelInfo>
 
 export const DOUBAO_DEFAULT_TEMPERATURE = 0.3
+
+/** 火山方舟 OpenAI 兼容 — 常规在线推理（按 Token）。文档：常规在线推理 / 兼容 OpenAI SDK */
+export const doubaoDefaultBaseUrl = "https://ark.cn-beijing.volces.com/api/v3"
+
+/** Coding Plan（套餐）及部分 AI 编程工具对接，与 {@link doubaoDefaultBaseUrl} 不可混用 */
+export const doubaoCodingPlanBaseUrl = "https://ark.cn-beijing.volces.com/api/coding/v3"
+
+/** 与 {@link doubaoCodingPlanBaseUrl} 联用时，Doubao-Seed-Code 在 OpenAI 兼容接口中的推荐模型名 */
+export const doubaoSeedCodeCodingPlanModelId = "ark-code-latest"
+
+/**
+ * 方舟「在线推理」OpenAI 兼容接口里 `model` 须填控制台模型列表中的 **Model ID**（带日期后缀），
+ * 或推理接入点的 **Endpoint ID**（`ep-` 开头）。本表把设置里友好的 catalog key 映射为常见 Model ID；
+ * 版本号会随官方更新而变化，若报错请对照控制台并可直接在模型下拉中改选或手写 Endpoint ID。
+ *
+ * @see https://www.volcengine.com/docs/82379/2121998
+ * @see https://www.volcengine.com/docs/82379/1330626
+ */
+export const doubaoInferenceModelIds: Record<DoubaoModelId, string> = {
+	"doubao-seed-1.6": "doubao-seed-1-6-251015",
+	"doubao-seed-1.6-thinking": "doubao-seed-1-6-thinking-251015",
+	"doubao-seed-1.6-vision": "doubao-seed-1-6-vision-251015",
+	// 按量 /api/v3；若 Base 设为 Coding Plan（…/api/coding/v3）则由插件对 Seed-Code 改用 ark-code-latest
+	"doubao-seed-code": "doubao-seed-code-preview-latest",
+	"doubao-1.5-pro-256k": "doubao-1-5-pro-256k-250115",
+	"doubao-1.5-pro-32k": "doubao-1-5-pro-32k-250115",
+	"doubao-1.5-lite-32k": "doubao-1-5-lite-32k-250115",
+	"doubao-1.5-vision-pro-32k": "doubao-1-5-vision-pro-32k-250115",
+}
+
+/** 解析发往方舟 API 的 `model` 字段；未知 id（如 `ep-xxx`）原样返回 */
+export function resolveDoubaoInferenceModelId(requestedModelId: string): string {
+	if (requestedModelId in doubaoInferenceModelIds) {
+		return doubaoInferenceModelIds[requestedModelId as DoubaoModelId]
+	}
+	return requestedModelId
+}

@@ -24,6 +24,9 @@ import {
 	fireworksModels,
 	basetenModels,
 	qwenCodeModels,
+	qwenModels,
+	doubaoModels,
+	glmModels,
 	litellmDefaultModelInfo,
 	lMStudioDefaultModelInfo,
 	BEDROCK_1M_CONTEXT_MODEL_IDS,
@@ -322,6 +325,54 @@ function getSelectedModel({
 			const info = qwenCodeModels[id as keyof typeof qwenCodeModels]
 			return { id, info }
 		}
+		case "qwen": {
+			const id = apiConfiguration.apiModelId ?? defaultModelId
+			const fromCatalog = qwenModels[id as keyof typeof qwenModels]
+			return {
+				id,
+				info:
+					fromCatalog ??
+					({
+						...openAiModelInfoSaneDefaults,
+						maxTokens: 8_192,
+						contextWindow: 131_072,
+						supportsImages: true,
+						description: "Custom Qwen model id",
+					} satisfies ModelInfo),
+			}
+		}
+		case "doubao": {
+			const id = apiConfiguration.apiModelId ?? defaultModelId
+			const fromCatalog = doubaoModels[id as keyof typeof doubaoModels]
+			return {
+				id,
+				info:
+					fromCatalog ??
+					({
+						...openAiModelInfoSaneDefaults,
+						maxTokens: 32_768,
+						contextWindow: 262_144,
+						supportsImages: true,
+						description: "Custom Volcengine Ark model id (console or ep-)",
+					} satisfies ModelInfo),
+			}
+		}
+		case "glm": {
+			const id = apiConfiguration.apiModelId ?? defaultModelId
+			const fromCatalog = glmModels[id as keyof typeof glmModels]
+			return {
+				id,
+				info:
+					fromCatalog ??
+					({
+						...openAiModelInfoSaneDefaults,
+						maxTokens: 16_384,
+						contextWindow: 131_072,
+						supportsImages: true,
+						description: "Custom GLM model id",
+					} satisfies ModelInfo),
+			}
+		}
 		case "openai-codex": {
 			const id = apiConfiguration.apiModelId ?? defaultModelId
 			const info = openAiCodexModels[id as keyof typeof openAiCodexModels]
@@ -339,7 +390,7 @@ function getSelectedModel({
 		// case "anthropic":
 		// case "fake-ai":
 		default: {
-			provider satisfies "anthropic" | "gemini-cli" | "fake-ai" | "qwen" | "doubao" | "glm"
+			provider satisfies "anthropic" | "gemini-cli" | "fake-ai"
 			const id = apiConfiguration.apiModelId ?? defaultModelId
 			const baseInfo = anthropicModels[id as keyof typeof anthropicModels]
 

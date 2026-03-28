@@ -45,7 +45,10 @@ export const PROVIDER_SERVICE_CONFIG: Partial<Record<ProviderName, ProviderServi
 	minimax: { serviceName: "MiniMax", serviceUrl: "https://minimax.chat" },
 	baseten: { serviceName: "Baseten", serviceUrl: "https://baseten.co" },
 	qwen: { serviceName: "Qwen (通义千问)", serviceUrl: "https://dashscope.console.aliyun.com" },
-	doubao: { serviceName: "Doubao (豆包)", serviceUrl: "https://console.volcengine.com/ark" },
+	doubao: {
+		serviceName: "Doubao (豆包)",
+		serviceUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint",
+	},
 	glm: { serviceName: "GLM (智谱清言)", serviceUrl: "https://open.bigmodel.cn" },
 	ollama: { serviceName: "Ollama", serviceUrl: "https://ollama.ai" },
 	lmstudio: { serviceName: "LM Studio", serviceUrl: "https://lmstudio.ai/docs" },

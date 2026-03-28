@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react"
-import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
+import { VSCodeLink, VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 import { Trans } from "react-i18next"
 import { ChevronsUpDown, Check, X, Info } from "lucide-react"
 
@@ -65,6 +65,8 @@ interface ModelPickerProps {
 	displayTransform?: (value: unknown) => string
 	/** Callback when model changes - useful for side effects like clearing related fields */
 	onModelChange?: (modelId: string) => void
+	/** Show a plain text field to type model id (e.g. Volcengine ep- / console Model ID) */
+	showDirectModelIdInput?: boolean
 }
 
 export const ModelPicker = ({
@@ -83,6 +85,7 @@ export const ModelPicker = ({
 	valueTransform,
 	displayTransform,
 	onModelChange,
+	showDirectModelIdInput,
 }: ModelPickerProps) => {
 	const { t } = useAppTranslation()
 
@@ -279,6 +282,19 @@ export const ModelPicker = ({
 						</Command>
 					</PopoverContent>
 				</Popover>
+				{showDirectModelIdInput && (
+					<VSCodeTextField
+						className="w-full mt-2"
+						value={String(apiConfiguration[modelIdKey] ?? "")}
+						placeholder={t("settings:modelPicker.directModelIdPlaceholder")}
+						onInput={(e) => {
+							const v = (e.target as HTMLInputElement).value
+							setApiConfigurationField(modelIdKey, v as ProviderSettings[ModelIdKey], true)
+							onModelChange?.(v)
+						}}>
+						<label className="block font-medium mb-1">{t("settings:modelPicker.directModelIdLabel")}</label>
+					</VSCodeTextField>
+				)}
 			</div>
 			{errorMessage && <ApiErrorMessage errorMessage={errorMessage} />}
 			{selectedModelInfo?.deprecated && (

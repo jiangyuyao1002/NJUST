@@ -862,7 +862,9 @@
 		"searchPlaceholder": "搜索",
 		"noMatchFound": "未找到匹配项",
 		"useCustomModel": "使用自定义：{{modelId}}",
-		"simplifiedExplanation": "你可以稍后调整详细的模型设置。"
+		"simplifiedExplanation": "你可以稍后调整详细的模型设置。",
+		"directModelIdLabel": "模型 ID（可自填）",
+		"directModelIdPlaceholder": "如 ep-… 或控制台 Model ID，与上方下拉同步"
 	},
 	"footer": {
 		"telemetry": {
