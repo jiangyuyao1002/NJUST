@@ -15,9 +15,11 @@
 | 项目 | 说明 |
 |------|------|
 | 角色 | 扩展作为 **HTTP 客户端**，你们的部署作为 **HTTP 服务端** |
-| 调用顺序 | 每次用户任务：`GET {baseUrl}/health` → `POST {baseUrl}/v1/run` |
+| 调用顺序（deferred，默认） | `GET /health` → `POST /v1/deferred/start` → 本地执行 tool_calls → `POST /v1/deferred/resume` → 循环至 `status == "done"` |
+| 调用顺序（legacy） | `GET /health` → `POST /v1/run` → （可选）`POST /v1/compile` 编译反馈 |
 | Base URL | 用户设置项 `njust-ai-cj.cloudAgent.serverUrl`；扩展会去掉末尾 `/` |
-| 与 MCP | 插件 **REST 路径不会**调用 `POST /mcp`。MCP 仅供其他客户端联调，与 `CloudAgentClient` 无关 |
+| 协议切换 | `njust-ai-cj.cloudAgent.deferredProtocol`（默认 **true**）；设为 false 回退到 legacy `/v1/run` |
+| 与 MCP | 插件 REST 路径不调用 `POST /mcp`。MCP 仅供其他客户端联调 |
 
 ---
 
@@ -83,6 +85,178 @@
 
 - `POST /v1/run` 返回 **非 2xx**：扩展向用户报错。
 - 响应 body **非 JSON**：扩展报错。
+
+---
+
+## 4a. Deferred 执行协议（推荐，默认开启）
+
+当 `njust-ai-cj.cloudAgent.deferredProtocol` 为 **true**（默认）时，扩展使用 deferred 协议代替单次 `/v1/run`。
+
+### 4a.1 `POST /v1/deferred/start`
+
+#### 请求体
+
+```json
+{
+  "goal": "<用户输入>",
+  "session_id": "<扩展任务 ID>",
+  "workspace_path": "<工作区根路径>",
+  "images": ["可选"]
+}
+```
+
+#### 响应体（`DeferredResponse`）
+
+```json
+{
+  "run_id": "unique-run-id",
+  "status": "pending",
+  "tool_calls": [
+    {
+      "call_id": "tc_001",
+      "tool": "read_file",
+      "arguments": { "path": "src/main.cj" }
+    }
+  ],
+  "workspace_ops": { "version": 1, "operations": [...] },
+  "text": "可选：显示在聊天中的文本",
+  "reasoning": "可选：思维链",
+  "logs": ["可选日志"],
+  "ok": true,
+  "memory_summary": "仅 status=done 时有意义",
+  "tokens_in": 0,
+  "tokens_out": 0,
+  "cost": 0
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `run_id` | string | 本次执行唯一标识，resume 时需回传 |
+| `status` | `"pending"` \| `"done"` | `pending` = 还需扩展执行 tool_calls 并 resume |
+| `tool_calls` | `DeferredToolCall[]` | 需要扩展本地执行的工具调用 |
+| `workspace_ops` | 同第 5 节 | 结构化写盘指令（与 tool_calls 可同时存在） |
+| `text` / `reasoning` / `logs` | 可选 | 增量展示内容 |
+
+### 4a.2 扩展侧执行流程
+
+1. 解析 `workspace_ops` → 按现有逻辑写盘（受 `applyRemoteWorkspaceOps` / `confirmRemoteWorkspaceOps` 控制）
+2. 依次执行 `tool_calls`，每个调用映射到本地 tool-executor：
+
+| 服务端 tool 名 | 本地执行器 | arguments |
+|----------------|-----------|-----------|
+| `read_file` | `execReadFile` | `{ path, start_line?, end_line? }` |
+| `write_file` | `execWriteFile` | `{ path, content }` |
+| `apply_diff` | `execApplyDiff` | `{ path, diff }` |
+| `list_files` | `execListFiles` | `{ path, recursive? }` |
+| `search_files` | `execSearchFiles` | `{ path, regex, file_pattern? }` |
+| `execute_command` | `execCommand` | `{ command, cwd?, timeout? }` |
+
+3. 将执行结果整理为 MCP 形字典：
+
+```json
+{
+  "call_id": "tc_001",
+  "content": "工具输出内容",
+  "is_error": false
+}
+```
+
+### 4a.3 `POST /v1/deferred/resume`
+
+#### 请求体
+
+```json
+{
+  "run_id": "<来自上一个响应的 run_id>",
+  "session_id": "<扩展任务 ID>",
+  "tool_results": [
+    { "call_id": "tc_001", "content": "1 | import ...", "is_error": false }
+  ]
+}
+```
+
+#### 响应体
+
+同 `DeferredResponse`。若 `status == "pending"` → 扩展继续执行并 resume；若 `status == "done"` → 循环结束。
+
+### 4a.4 完整时序
+
+```
+扩展                                  服务端
+  │                                     │
+  │─── GET /health ────────────────────>│
+  │<── 200 ─────────────────────────────│
+  │                                     │
+  │─── POST /v1/deferred/start ────────>│
+  │    { goal, session_id, ... }        │
+  │<── { run_id, status:"pending",  ────│
+  │      tool_calls:[...],              │
+  │      workspace_ops:{...} }          │
+  │                                     │
+  │  [扩展写盘 workspace_ops]           │
+  │  [扩展执行 tool_calls]              │
+  │                                     │
+  │─── POST /v1/deferred/resume ───────>│
+  │    { run_id, tool_results:[...] }   │
+  │<── { status:"pending", ... } ───────│  ← 可能多次迭代
+  │  ...                                │
+  │<── { status:"done", ok:true } ──────│
+  │                                     │
+  │  [聊天显示完成结果]                 │
+```
+
+### 4a.5 已知限制
+
+- 会话仅存服务端内存：多副本部署需 Redis 等共享状态 + 粘性会话
+- `load_cangjie_skill` 仍在服务端读盘（不经 MCP），后续可改为 defer 或扩展提供技能正文
+- 水平扩展 / 进程重启会丢失 `run_id`
+- 扩展侧最大迭代上限 50 次
+
+---
+
+## 4b. `POST /v1/compile`（编译反馈闭环，legacy 路径）
+
+当 `njust-ai-cj.cloudAgent.compileLoop.enabled` 为 **true**（默认）时，扩展在 `workspace_ops` 写盘完成后，自动调用此端点在服务器上编译。
+
+### 4b.1 请求体（JSON）
+
+```json
+{
+  "session_id": "<与 /v1/run 相同的任务 ID>",
+  "workspace_path": "<当前工作区根路径，可选>"
+}
+```
+
+### 4b.2 响应体（JSON）
+
+```json
+{
+  "success": true,
+  "output": "cjpm build 的完整 stdout + stderr"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 编译是否成功（exit code 0） |
+| `output` | string | `cjc` / `cjpm build` 的完整输出（stdout + stderr），供扩展展示和回传 Agent |
+
+### 4b.3 编译反馈循环流程
+
+1. 扩展在 `workspace_ops` 写盘后调用 `POST /v1/compile`
+2. 若 `success: true` → 聊天中显示「编译通过」，循环结束
+3. 若 `success: false` → 聊天中显示编译错误，然后：
+   - 将错误信息作为 `goal` 发送 `POST /v1/run`（要求 Agent 修正代码）
+   - Agent 返回新的 `workspace_ops` → 扩展写盘 → 再次调用 `/v1/compile`
+4. 循环直到编译通过或达到 `cloudAgent.compileLoop.maxRetries`（默认 3 次）
+
+### 4b.4 相关设置
+
+| 设置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `njust-ai-cj.cloudAgent.compileLoop.enabled` | `true` | 是否开启编译反馈循环 |
+| `njust-ai-cj.cloudAgent.compileLoop.maxRetries` | `3` | 最大「编译-修正」迭代次数（1–10） |
 
 ---
 

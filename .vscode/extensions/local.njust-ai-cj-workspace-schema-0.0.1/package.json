@@ -21,6 +21,18 @@
 					"type": "string",
 					"description": "Optional X-API-Key for Cloud Agent."
 				},
+				"njust-ai-cj.cloudAgent.deferredProtocol": {
+					"type": "boolean",
+					"description": "Use deferred execution protocol (start → tool execution → resume loop)."
+				},
+				"njust-ai-cj.cloudAgent.compileLoop.enabled": {
+					"type": "boolean",
+					"description": "Enable compile feedback loop after Cloud Agent writes code."
+				},
+				"njust-ai-cj.cloudAgent.compileLoop.maxRetries": {
+					"type": "number",
+					"description": "Max compile-fix iterations."
+				},
 				"njust-ai-cj.mcpServer.enabled": {
 					"type": "boolean"
 				},

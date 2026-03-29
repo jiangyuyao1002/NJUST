@@ -47,3 +47,53 @@ export interface CloudAgentClientOptions {
 	/** Per-request timeout in ms; 0 or unset means no timeout. */
 	requestTimeoutMs?: number
 }
+
+/** POST /v1/compile response from the cloud server. */
+export interface CloudCompileResponse {
+	success: boolean
+	output: string
+}
+
+export interface CloudCompileResult {
+	success: boolean
+	output: string
+}
+
+// ---------------------------------------------------------------------------
+// Deferred execution protocol (POST /v1/deferred/start, /v1/deferred/resume)
+// ---------------------------------------------------------------------------
+
+/** A single tool call the server wants the extension to execute locally. */
+export interface DeferredToolCall {
+	call_id: string
+	tool: string
+	arguments: Record<string, unknown>
+}
+
+/** Result of a locally-executed tool call, sent back to the server. */
+export interface DeferredToolResult {
+	call_id: string
+	content: string
+	is_error: boolean
+}
+
+/** Response shape shared by both /v1/deferred/start and /v1/deferred/resume. */
+export interface DeferredResponse {
+	run_id: string
+	status: "pending" | "done"
+	/** Tool calls the extension must execute locally before resuming. */
+	tool_calls?: DeferredToolCall[]
+	/** Structured workspace mutations (same schema as /v1/run). */
+	workspace_ops?: WorkspaceOpsEnvelope
+	/** Incremental text to display in chat. */
+	text?: string
+	/** Reasoning / chain-of-thought text. */
+	reasoning?: string
+	/** Whether the overall task succeeded (present when status == "done"). */
+	ok?: boolean
+	memory_summary?: string
+	logs?: string[]
+	tokens_in?: number
+	tokens_out?: number
+	cost?: number
+}

@@ -1,3 +1,6 @@
+import { Anthropic } from "@anthropic-ai/sdk"
+import OpenAI from "openai"
+
 import {
 	doubaoCodingPlanBaseUrl,
 	doubaoDefaultBaseUrl,
@@ -9,7 +12,15 @@ import {
 	type ModelInfo,
 } from "@njust-ai-cj/types"
 
-/** 用户自填 ep- / 控制台 Model ID 时的能力占位（定价以控制台为准） */
+import type { ApiHandlerOptions } from "../../shared/api"
+
+import { ApiStream, ApiStreamUsageChunk } from "../transform/stream"
+import { getModelParams } from "../transform/model-params"
+import { convertToR1Format } from "../transform/r1-format"
+
+import { OpenAiHandler } from "./openai"
+import type { ApiHandlerCreateMessageMetadata } from "../index"
+
 const doubaoCustomModelInfo: ModelInfo = {
 	...openAiModelInfoSaneDefaults,
 	maxTokens: 32_768,
@@ -18,26 +29,19 @@ const doubaoCustomModelInfo: ModelInfo = {
 	supportsPromptCache: false,
 }
 
-import type { ApiHandlerOptions } from "../../shared/api"
-
-import type { ApiStreamUsageChunk } from "../transform/stream"
-import { getModelParams } from "../transform/model-params"
-
-import { OpenAICompatibleHandler, OpenAICompatibleConfig } from "./openai-compatible"
-
 function trimTrailingSlash(url: string): string {
 	return url.replace(/\/+$/, "")
 }
 
-export class DoubaoHandler extends OpenAICompatibleHandler {
+type DoubaoChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParamsStreaming & {
+	thinking_type?: "enabled" | "disabled" | "auto"
+}
+
+export class DoubaoHandler extends OpenAiHandler {
 	constructor(options: ApiHandlerOptions) {
 		const catalogModelId = options.apiModelId ?? doubaoDefaultModelId
-		const modelInfo =
-			doubaoModels[catalogModelId as keyof typeof doubaoModels] ?? doubaoCustomModelInfo
-
 		const userBase = (options.doubaoBaseUrl ?? "").trim()
 		const effectiveBaseUrl = userBase || doubaoDefaultBaseUrl
-		// 仅当用户显式把 Base 设为 Coding Plan 地址时走 ark-code-latest；默认按量 /api/v3 勿自动切套餐，否则会报无订阅
 		const usingCodingPlanEndpoint =
 			trimTrailingSlash(effectiveBaseUrl) === trimTrailingSlash(doubaoCodingPlanBaseUrl)
 		const inferenceModelId =
@@ -45,17 +49,14 @@ export class DoubaoHandler extends OpenAICompatibleHandler {
 				? doubaoSeedCodeCodingPlanModelId
 				: resolveDoubaoInferenceModelId(catalogModelId)
 
-		const config: OpenAICompatibleConfig = {
-			providerName: "doubao",
-			baseURL: effectiveBaseUrl,
-			apiKey: options.doubaoApiKey ?? "not-provided",
-			modelId: inferenceModelId,
-			modelInfo,
-			modelMaxTokens: options.modelMaxTokens ?? undefined,
-			temperature: options.modelTemperature ?? undefined,
-		}
-
-		super(options, config)
+		super({
+			...options,
+			openAiApiKey: options.doubaoApiKey ?? "not-provided",
+			openAiModelId: inferenceModelId,
+			openAiBaseUrl: effectiveBaseUrl,
+			openAiStreamingEnabled: true,
+			includeMaxTokens: true,
+		})
 	}
 
 	override getModel() {
@@ -71,26 +72,84 @@ export class DoubaoHandler extends OpenAICompatibleHandler {
 		return { id, info, ...params }
 	}
 
-	protected override processUsageMetrics(usage: {
-		inputTokens?: number
-		outputTokens?: number
-		details?: {
-			cachedInputTokens?: number
-			reasoningTokens?: number
+	override async *createMessage(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
+		const modelId = this.options.openAiModelId ?? this.options.apiModelId ?? doubaoDefaultModelId
+		const { info: modelInfo } = this.getModel()
+
+		const isThinkingModel =
+			modelId.includes("thinking") || modelId.includes("seed-1.6") || modelId.includes("seed-2.0")
+
+		const convertedMessages = convertToR1Format([{ role: "user", content: systemPrompt }, ...messages], {
+			mergeToolResultText: isThinkingModel,
+		})
+
+		const requestOptions: DoubaoChatCompletionParams = {
+			model: modelId,
+			temperature: this.options.modelTemperature ?? 0,
+			messages: convertedMessages,
+			stream: true as const,
+			stream_options: { include_usage: true },
+			...(isThinkingModel && { thinking_type: "enabled" }),
+			tools: this.convertToolsForOpenAI(metadata?.tools),
+			tool_choice: metadata?.tool_choice,
+			parallel_tool_calls: metadata?.parallelToolCalls ?? true,
 		}
-		raw?: Record<string, unknown>
-	}): ApiStreamUsageChunk {
-		return {
-			type: "usage",
-			inputTokens: usage.inputTokens || 0,
-			outputTokens: usage.outputTokens || 0,
-			cacheReadTokens: usage.details?.cachedInputTokens,
-			reasoningTokens: usage.details?.reasoningTokens,
+
+		this.addMaxTokensIfNeeded(requestOptions, modelInfo)
+
+		let stream
+		try {
+			stream = await this.client.chat.completions.create(requestOptions)
+		} catch (error) {
+			const { handleOpenAIError } = await import("./utils/openai-error-handler")
+			throw handleOpenAIError(error, "Doubao")
+		}
+
+		let lastUsage
+
+		for await (const chunk of stream) {
+			const delta = chunk.choices?.[0]?.delta ?? {}
+
+			if (delta.content) {
+				yield { type: "text", text: delta.content }
+			}
+
+			if ("reasoning_content" in delta && delta.reasoning_content) {
+				yield { type: "reasoning", text: (delta.reasoning_content as string) || "" }
+			}
+
+			if (delta.tool_calls) {
+				for (const toolCall of delta.tool_calls) {
+					yield {
+						type: "tool_call_partial",
+						index: toolCall.index,
+						id: toolCall.id,
+						name: toolCall.function?.name,
+						arguments: toolCall.function?.arguments,
+					}
+				}
+			}
+
+			if (chunk.usage) {
+				lastUsage = chunk.usage
+			}
+		}
+
+		if (lastUsage) {
+			yield this.processUsageMetrics(lastUsage, modelInfo)
 		}
 	}
 
-	protected override getMaxOutputTokens(): number | undefined {
-		const modelInfo = this.config.modelInfo
-		return this.options.modelMaxTokens || modelInfo.maxTokens || undefined
+	protected override processUsageMetrics(usage: any, _modelInfo?: any): ApiStreamUsageChunk {
+		return {
+			type: "usage",
+			inputTokens: usage?.prompt_tokens || 0,
+			outputTokens: usage?.completion_tokens || 0,
+			cacheReadTokens: usage?.prompt_tokens_details?.cached_tokens,
+		}
 	}
 }

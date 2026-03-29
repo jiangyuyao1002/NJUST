@@ -92,7 +92,16 @@ import {
 } from "../../services/cloud-agent/applyCloudWorkspaceOps"
 import { buildCloudWorkspaceOpToolMessage } from "../../services/cloud-agent/buildCloudWorkspaceOpToolMessage"
 import { CloudAgentClient } from "../../services/cloud-agent/CloudAgentClient"
-import type { CloudAgentCallbacks, CloudRunResult } from "../../services/cloud-agent/types"
+import { executeDeferredToolCall } from "../../services/cloud-agent/executeDeferredToolCall"
+import { parseWorkspaceOps } from "../../services/cloud-agent/parseWorkspaceOps"
+import type {
+	CloudAgentCallbacks,
+	CloudCompileResult,
+	CloudRunResult,
+	DeferredResponse,
+	DeferredToolResult,
+	WorkspaceOp,
+} from "../../services/cloud-agent/types"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
@@ -2506,6 +2515,34 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		})
 		this.emit(NJUST_AI_CJEventName.TaskStarted)
 
+		// Branch: deferred protocol (start → tool execution → resume → done)
+		const useDeferredProtocol = config.get<boolean>("cloudAgent.deferredProtocol", true) ?? true
+		if (useDeferredProtocol) {
+			try {
+				await client.connect()
+			} catch (error) {
+				if (this.abort) return
+				const msg = error instanceof Error ? error.message : String(error)
+				await this.say("error", `Cloud Agent connect error: ${msg}`)
+				await this.ask("api_req_failed", msg)
+				return
+			} finally {
+				this.currentRequestAbortController = undefined
+			}
+			await this.runDeferredCloudAgentLoop(
+				client,
+				serverUrl,
+				deviceToken,
+				apiKey,
+				requestTimeoutMs,
+				config,
+				userMessage,
+				images,
+			)
+			return
+		}
+
+		// Legacy single-shot /v1/run path
 		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent task submitted" }))
 
 		let runResult: CloudRunResult | undefined
@@ -2631,6 +2668,379 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			}
 		}
 		// When applyRemoteWorkspaceOps is false, skip applying workspace_ops (user disabled in settings).
+
+		// --- Compile feedback loop (legacy /v1/run path only) ---
+		const compileLoopEnabled = config.get<boolean>("cloudAgent.compileLoop.enabled", true) ?? true
+		const compileMaxRetries = config.get<number>("cloudAgent.compileLoop.maxRetries", 3) ?? 3
+
+		if (compileLoopEnabled && applyRemoteWorkspaceOps && ops.length > 0 && !this.abort) {
+			await this.runCompileFeedbackLoop(
+				client,
+				serverUrl,
+				deviceToken,
+				apiKey,
+				requestTimeoutMs,
+				callbacks,
+				compileMaxRetries,
+				confirmRemoteWorkspaceOps,
+			)
+		}
+	}
+
+	/**
+	 * Compile feedback loop: compile on server → if errors, ask Cloud Agent to fix → apply fixes → re-compile.
+	 * Loops until compilation passes or maxRetries is exhausted.
+	 */
+	private async runCompileFeedbackLoop(
+		client: CloudAgentClient,
+		serverUrl: string,
+		deviceToken: string,
+		apiKey: string,
+		requestTimeoutMs: number,
+		callbacks: CloudAgentCallbacks,
+		maxRetries: number,
+		confirmOps: boolean,
+	): Promise<void> {
+		for (let attempt = 1; attempt <= maxRetries && !this.abort; attempt++) {
+			await this.say("text", `[Compile] 编译检查 (${attempt}/${maxRetries})...`)
+
+			const compileAbort = new AbortController()
+			this.currentRequestAbortController = compileAbort
+
+			let compileResult: CloudCompileResult
+			try {
+				const compileClient = new CloudAgentClient(serverUrl, deviceToken, callbacks, {
+					apiKey: apiKey || undefined,
+					signal: compileAbort.signal,
+					requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
+				})
+				compileResult = await compileClient.compile(this.taskId, this.cwd)
+			} catch (error) {
+				if (this.abort) break
+				const msg = error instanceof Error ? error.message : String(error)
+				await this.say("error", `[Compile] 编译请求失败: ${msg}`)
+				break
+			} finally {
+				this.currentRequestAbortController = undefined
+			}
+
+			if (compileResult.success) {
+				await this.say("text", "[Compile] 编译通过!")
+				break
+			}
+
+			const truncatedOutput =
+				compileResult.output.length > 8000
+					? compileResult.output.slice(0, 8000) + "\n...(output truncated)"
+					: compileResult.output
+			await this.say("text", `[Compile] 编译失败:\n\`\`\`\n${truncatedOutput}\n\`\`\``)
+
+			if (attempt >= maxRetries) {
+				await this.say("text", `[Compile] 已达最大重试次数 (${maxRetries})，停止编译反馈循环。`)
+				break
+			}
+
+			// Ask Cloud Agent to fix the compilation errors
+			const fixGoal =
+				`以下仓颉代码编译失败，请根据错误信息修正代码，返回修正后的 workspace_ops。` +
+				`仅修改出错的文件，不要重复返回正确的文件。\n\n编译输出:\n${truncatedOutput}`
+
+			await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent compile-fix iteration" }))
+
+			const fixAbort = new AbortController()
+			this.currentRequestAbortController = fixAbort
+
+			let fixResult: CloudRunResult
+			try {
+				const fixClient = new CloudAgentClient(serverUrl, deviceToken, callbacks, {
+					apiKey: apiKey || undefined,
+					signal: fixAbort.signal,
+					requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
+				})
+				fixResult = await fixClient.submitTask(this.taskId, fixGoal, this.cwd)
+				await this.say(
+					"api_req_finished",
+					JSON.stringify({
+						tokensIn: fixResult.tokensIn,
+						tokensOut: fixResult.tokensOut,
+						cost: fixResult.cost,
+					}),
+				)
+			} catch (error) {
+				if (this.abort) break
+				const msg = error instanceof Error ? error.message : String(error)
+				await this.say("error", `[Compile] 修正请求失败: ${msg}`)
+				break
+			} finally {
+				this.currentRequestAbortController = undefined
+			}
+
+			const fixOps = fixResult.workspaceOps
+			if (fixOps.length === 0) {
+				await this.say("text", "[Compile] Cloud Agent 未返回修正代码，停止编译反馈循环。")
+				break
+			}
+
+			// Apply fix workspace_ops
+			if (confirmOps) {
+				for (let i = 0; i < fixOps.length && !this.abort; i++) {
+					const op = fixOps[i]
+					const accessAllowed = this.rooIgnoreController?.validateAccess(op.path)
+					if (accessAllowed === false) {
+						await this.say("rooignore_error", op.path)
+						continue
+					}
+					const isWriteProtected = this.rooProtectedController?.isWriteProtected(op.path) || false
+					const toolJson = await buildCloudWorkspaceOpToolMessage(this.cwd, op, { isWriteProtected })
+
+					let response: ClineAskResponse
+					try {
+						const askResult = await this.ask("tool", toolJson, false)
+						response = askResult.response
+						if (askResult.text) {
+							await this.say("user_feedback", askResult.text, askResult.images)
+						}
+					} catch (err) {
+						if (err instanceof AskIgnoredError) break
+						throw err
+					}
+
+					if (response !== "yesButtonClicked") {
+						await this.say("text", `Skipped compile-fix op (${i + 1}/${fixOps.length}): ${op.path}`)
+						continue
+					}
+
+					const single = await applySingleCloudWorkspaceOp(this.cwd, op)
+					await this.say("text", single.message)
+					if (!single.ok) {
+						await this.say("error", `Compile-fix workspace operation failed: ${single.message}`)
+						break
+					}
+				}
+			} else {
+				const applied = await applyCloudWorkspaceOps(this.cwd, fixOps, () => this.abort)
+				const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
+				const header = applied.ok
+					? `[Compile] 修正代码已应用 (${applied.results.length} 个文件)。`
+					: `[Compile] 修正代码应用在第 ${(applied.failedAtIndex ?? 0) + 1} 个操作处失败。`
+				await this.say("text", [header, ...lines].join("\n"))
+				if (!applied.ok) break
+			}
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Deferred Cloud Agent loop
+	// POST /v1/deferred/start → execute tool_calls / workspace_ops locally
+	// → POST /v1/deferred/resume → repeat until status == "done"
+	// ---------------------------------------------------------------------------
+
+	private async runDeferredCloudAgentLoop(
+		client: CloudAgentClient,
+		serverUrl: string,
+		deviceToken: string,
+		apiKey: string,
+		requestTimeoutMs: number,
+		config: vscode.WorkspaceConfiguration,
+		userMessage: string,
+		images?: string[],
+	): Promise<void> {
+		const applyRemoteWorkspaceOps = config.get<boolean>("cloudAgent.applyRemoteWorkspaceOps", true) ?? true
+		const confirmRemoteWorkspaceOps = config.get<boolean>("cloudAgent.confirmRemoteWorkspaceOps", true) ?? true
+		const maxIterations = 50
+
+		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent deferred/start" }))
+
+		const startAbort = new AbortController()
+		this.currentRequestAbortController = startAbort
+
+		let deferredResp: DeferredResponse
+		try {
+			const startClient = new CloudAgentClient(serverUrl, deviceToken, {
+				onText: async (c) => this.say("text", c),
+				onReasoning: async (c) => this.say("reasoning", c),
+				onDone: async (s) => { if (s) await this.say("completion_result", s) },
+				onError: async (m) => this.say("error", m),
+			}, {
+				apiKey: apiKey || undefined,
+				signal: startAbort.signal,
+				requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
+			})
+			deferredResp = await startClient.deferredStart(this.taskId, userMessage, this.cwd, images)
+			await this.say(
+				"api_req_finished",
+				JSON.stringify({ tokensIn: deferredResp.tokens_in ?? 0, tokensOut: deferredResp.tokens_out ?? 0, cost: deferredResp.cost ?? 0 }),
+			)
+		} catch (error) {
+			if (this.abort) return
+			const msg = error instanceof Error ? error.message : String(error)
+			await this.say("error", `Cloud Agent deferred/start error: ${msg}`)
+			await this.ask("api_req_failed", msg)
+			return
+		} finally {
+			this.currentRequestAbortController = undefined
+		}
+
+		let iteration = 0
+		while (deferredResp.status === "pending" && iteration < maxIterations && !this.abort) {
+			iteration++
+
+			// Display incremental text / reasoning
+			if (deferredResp.text) {
+				await this.say("text", deferredResp.text)
+			}
+			if (deferredResp.reasoning) {
+				await this.say("reasoning", deferredResp.reasoning)
+			}
+			for (const log of deferredResp.logs ?? []) {
+				await this.say("text", log)
+			}
+
+			// Apply workspace_ops if present
+			const { operations: ops } = parseWorkspaceOps(deferredResp)
+			if (ops.length > 0 && applyRemoteWorkspaceOps) {
+				await this.applyWorkspaceOps(ops, confirmRemoteWorkspaceOps)
+			} else if (ops.length > 0) {
+				await this.say(
+					"text",
+					`Cloud Agent 返回了 ${ops.length} 条 workspace_ops，但 applyRemoteWorkspaceOps 已关闭，跳过写盘。`,
+				)
+			}
+
+			// Execute tool_calls locally
+			const toolResults: DeferredToolResult[] = []
+			const toolCalls = deferredResp.tool_calls ?? []
+			for (const call of toolCalls) {
+				if (this.abort) break
+				await this.say("text", `[Deferred] executing tool: ${call.tool} (${call.call_id})`)
+				const result = await executeDeferredToolCall(this.cwd, call)
+				toolResults.push(result)
+				if (result.is_error) {
+					await this.say("text", `[Deferred] tool ${call.tool} error: ${result.content.slice(0, 500)}`)
+				}
+			}
+
+			if (this.abort) break
+
+			// Resume
+			await this.say("api_req_started", JSON.stringify({ request: `Cloud Agent deferred/resume (iteration ${iteration})` }))
+
+			const resumeAbort = new AbortController()
+			this.currentRequestAbortController = resumeAbort
+
+			try {
+				const resumeClient = new CloudAgentClient(serverUrl, deviceToken, {
+					onText: async (c) => this.say("text", c),
+					onReasoning: async (c) => this.say("reasoning", c),
+					onDone: async (s) => { if (s) await this.say("completion_result", s) },
+					onError: async (m) => this.say("error", m),
+				}, {
+					apiKey: apiKey || undefined,
+					signal: resumeAbort.signal,
+					requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
+				})
+				deferredResp = await resumeClient.deferredResume(
+					deferredResp.run_id,
+					this.taskId,
+					toolResults,
+				)
+				await this.say(
+					"api_req_finished",
+					JSON.stringify({ tokensIn: deferredResp.tokens_in ?? 0, tokensOut: deferredResp.tokens_out ?? 0, cost: deferredResp.cost ?? 0 }),
+				)
+			} catch (error) {
+				if (this.abort) break
+				const msg = error instanceof Error ? error.message : String(error)
+				await this.say("error", `Cloud Agent deferred/resume error: ${msg}`)
+				await this.ask("api_req_failed", msg)
+				return
+			} finally {
+				this.currentRequestAbortController = undefined
+			}
+		}
+
+		if (iteration >= maxIterations) {
+			await this.say("text", `[Deferred] 达到最大迭代次数 (${maxIterations})，停止循环。`)
+		}
+
+		// Handle final "done" response
+		if (deferredResp.status === "done") {
+			if (deferredResp.text) {
+				await this.say("text", deferredResp.text)
+			}
+			if (deferredResp.reasoning) {
+				await this.say("reasoning", deferredResp.reasoning)
+			}
+			for (const log of deferredResp.logs ?? []) {
+				await this.say("text", log)
+			}
+			if (deferredResp.memory_summary) {
+				await this.say("text", deferredResp.memory_summary)
+			}
+
+			// Final workspace_ops (if any)
+			const { operations: finalOps } = parseWorkspaceOps(deferredResp)
+			if (finalOps.length > 0 && applyRemoteWorkspaceOps) {
+				await this.applyWorkspaceOps(finalOps, confirmRemoteWorkspaceOps)
+			}
+
+			await this.say(
+				"completion_result",
+				deferredResp.ok ? "Cloud Agent 任务完成。" : "Cloud Agent 任务结束（服务端报告未成功）。",
+			)
+		}
+	}
+
+	/**
+	 * Shared helper: apply workspace_ops with optional per-op confirmation UI.
+	 */
+	private async applyWorkspaceOps(ops: WorkspaceOp[], confirmOps: boolean): Promise<void> {
+		if (confirmOps) {
+			for (let i = 0; i < ops.length && !this.abort; i++) {
+				const op = ops[i]
+				const accessAllowed = this.rooIgnoreController?.validateAccess(op.path)
+				if (accessAllowed === false) {
+					await this.say("rooignore_error", op.path)
+					continue
+				}
+				const isWriteProtected = this.rooProtectedController?.isWriteProtected(op.path) || false
+				const toolJson = await buildCloudWorkspaceOpToolMessage(this.cwd, op, { isWriteProtected })
+
+				let response: ClineAskResponse
+				try {
+					const askResult = await this.ask("tool", toolJson, false)
+					response = askResult.response
+					if (askResult.text) {
+						await this.say("user_feedback", askResult.text, askResult.images)
+					}
+				} catch (err) {
+					if (err instanceof AskIgnoredError) break
+					throw err
+				}
+
+				if (response !== "yesButtonClicked") {
+					await this.say("text", `Skipped workspace op (${i + 1}/${ops.length}): ${op.path}`)
+					continue
+				}
+
+				const single = await applySingleCloudWorkspaceOp(this.cwd, op)
+				await this.say("text", single.message)
+				if (!single.ok) {
+					await this.say("error", `Workspace operation failed: ${single.message}`)
+					break
+				}
+			}
+		} else {
+			const applied = await applyCloudWorkspaceOps(this.cwd, ops, () => this.abort)
+			const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
+			const header = applied.ok
+				? `workspace_ops applied (${applied.results.length} operation(s)).`
+				: `workspace_ops stopped at operation ${(applied.failedAtIndex ?? 0) + 1} of ${ops.length}.`
+			await this.say("text", [header, ...lines].join("\n"))
+			if (!applied.ok) {
+				await this.say("error", `Workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`)
+			}
+		}
 	}
 
 	// Task Loop

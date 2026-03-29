@@ -1,5 +1,14 @@
 import { parseWorkspaceOps } from "./parseWorkspaceOps"
-import type { CloudAgentCallbacks, CloudAgentClientOptions, CloudRunResponse, CloudRunResult } from "./types"
+import type {
+	CloudAgentCallbacks,
+	CloudAgentClientOptions,
+	CloudCompileResponse,
+	CloudCompileResult,
+	CloudRunResponse,
+	CloudRunResult,
+	DeferredResponse,
+	DeferredToolResult,
+} from "./types"
 
 /** Undici/Node often surfaces low-level failures as `fetch failed` with details on `error.cause`. */
 function enrichFetchError(error: unknown): Error {
@@ -193,6 +202,126 @@ export class CloudAgentClient {
 			workspaceOps,
 			workspaceOpsParseError: workspaceOpsError,
 		}
+	}
+
+	/**
+	 * Call POST /v1/compile to run cjc/cjpm build on the server side.
+	 * Returns structured compile output (success flag + stdout/stderr).
+	 */
+	async compile(sessionId: string, workspacePath?: string): Promise<CloudCompileResult> {
+		const body: Record<string, unknown> = { session_id: sessionId }
+		if (workspacePath) {
+			body.workspace_path = workspacePath
+		}
+
+		const { signal, cleanup } = this.mergeAbortAndTimeout()
+		let resp: Response
+		try {
+			try {
+				resp = await fetch(`${this.serverUrl}/v1/compile`, {
+					method: "POST",
+					headers: this.buildHeaders(),
+					body: JSON.stringify(body),
+					...(signal ? { signal } : {}),
+				})
+			} catch (e) {
+				throw enrichFetchError(e)
+			}
+		} finally {
+			cleanup()
+		}
+
+		if (!resp.ok) {
+			const errText = await resp.text()
+			const slice = errText.slice(0, 500)
+			throw new Error(
+				`Cloud Agent compile error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
+			)
+		}
+
+		const text = await resp.text()
+		let data: CloudCompileResponse
+		try {
+			data = JSON.parse(text) as CloudCompileResponse
+		} catch {
+			throw new Error(
+				`Cloud Agent: compile response is not valid JSON (HTTP ${resp.status}): ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`,
+			)
+		}
+
+		return {
+			success: data.success,
+			output: data.output ?? "",
+		}
+	}
+
+	// -------------------------------------------------------------------
+	// Deferred execution protocol
+	// -------------------------------------------------------------------
+
+	private async fetchDeferred(endpoint: string, body: Record<string, unknown>): Promise<DeferredResponse> {
+		const { signal, cleanup } = this.mergeAbortAndTimeout()
+		let resp: Response
+		try {
+			try {
+				resp = await fetch(`${this.serverUrl}${endpoint}`, {
+					method: "POST",
+					headers: this.buildHeaders(),
+					body: JSON.stringify(body),
+					...(signal ? { signal } : {}),
+				})
+			} catch (e) {
+				throw enrichFetchError(e)
+			}
+		} finally {
+			cleanup()
+		}
+
+		if (!resp.ok) {
+			const errText = await resp.text()
+			const slice = errText.slice(0, 500)
+			throw new Error(
+				`Cloud Agent deferred error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
+			)
+		}
+
+		const text = await resp.text()
+		try {
+			return JSON.parse(text) as DeferredResponse
+		} catch {
+			throw new Error(
+				`Cloud Agent: deferred response is not valid JSON (HTTP ${resp.status}): ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`,
+			)
+		}
+	}
+
+	async deferredStart(
+		sessionId: string,
+		message: string,
+		workspacePath?: string,
+		images?: string[],
+	): Promise<DeferredResponse> {
+		const body: Record<string, unknown> = {
+			goal: message,
+			session_id: sessionId,
+			workspace_path: workspacePath,
+		}
+		if (images && images.length > 0) {
+			body.images = images
+		}
+		return this.fetchDeferred("/v1/deferred/start", body)
+	}
+
+	async deferredResume(
+		runId: string,
+		sessionId: string,
+		toolResults: DeferredToolResult[],
+	): Promise<DeferredResponse> {
+		return this.fetchDeferred("/v1/deferred/resume", {
+			run_id: runId,
+			session_id: sessionId,
+			tool_results: toolResults,
+		})
 	}
 
 	async disconnect(): Promise<void> {
