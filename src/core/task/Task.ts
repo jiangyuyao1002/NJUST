@@ -2529,16 +2529,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			} finally {
 				this.currentRequestAbortController = undefined
 			}
-			await this.runDeferredCloudAgentLoop(
-				client,
-				serverUrl,
-				deviceToken,
-				apiKey,
-				requestTimeoutMs,
-				config,
-				userMessage,
-				images,
-			)
+		await this.runDeferredCloudAgentLoop(
+			client,
+			serverUrl,
+			deviceToken,
+			apiKey,
+			requestTimeoutMs,
+			config,
+			callbacks,
+			userMessage,
+			images,
+		)
 			return
 		}
 
@@ -2669,7 +2670,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 		// When applyRemoteWorkspaceOps is false, skip applying workspace_ops (user disabled in settings).
 
-		// --- Compile feedback loop (legacy /v1/run path only) ---
+		// --- Compile feedback loop (legacy /v1/run path); deferred path has an equivalent at end of runDeferredCloudAgentLoop ---
 		const compileLoopEnabled = config.get<boolean>("cloudAgent.compileLoop.enabled", true) ?? true
 		const compileMaxRetries = config.get<number>("cloudAgent.compileLoop.maxRetries", 3) ?? 3
 
@@ -2842,12 +2843,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		apiKey: string,
 		requestTimeoutMs: number,
 		config: vscode.WorkspaceConfiguration,
+		callbacks: CloudAgentCallbacks,
 		userMessage: string,
 		images?: string[],
 	): Promise<void> {
 		const applyRemoteWorkspaceOps = config.get<boolean>("cloudAgent.applyRemoteWorkspaceOps", true) ?? true
 		const confirmRemoteWorkspaceOps = config.get<boolean>("cloudAgent.confirmRemoteWorkspaceOps", true) ?? true
 		const maxIterations = 50
+		let hadWorkspaceOpsForCompile = false
 
 		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent deferred/start" }))
 
@@ -2896,16 +2899,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				await this.say("text", log)
 			}
 
-			// Apply workspace_ops if present
-			const { operations: ops } = parseWorkspaceOps(deferredResp)
-			if (ops.length > 0 && applyRemoteWorkspaceOps) {
-				await this.applyWorkspaceOps(ops, confirmRemoteWorkspaceOps)
-			} else if (ops.length > 0) {
-				await this.say(
-					"text",
-					`Cloud Agent 返回了 ${ops.length} 条 workspace_ops，但 applyRemoteWorkspaceOps 已关闭，跳过写盘。`,
-				)
-			}
+		// Apply workspace_ops if present
+		const { operations: ops } = parseWorkspaceOps(deferredResp)
+		if (ops.length > 0 && applyRemoteWorkspaceOps) {
+			hadWorkspaceOpsForCompile = true
+			await this.applyWorkspaceOps(ops, confirmRemoteWorkspaceOps)
+		} else if (ops.length > 0) {
+			await this.say(
+				"text",
+				`Cloud Agent 返回了 ${ops.length} 条 workspace_ops，但 applyRemoteWorkspaceOps 已关闭，跳过写盘。`,
+			)
+		}
 
 			// Execute tool_calls locally
 			const toolResults: DeferredToolResult[] = []
@@ -2978,18 +2982,36 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				await this.say("text", deferredResp.memory_summary)
 			}
 
-			// Final workspace_ops (if any)
-			const { operations: finalOps } = parseWorkspaceOps(deferredResp)
-			if (finalOps.length > 0 && applyRemoteWorkspaceOps) {
-				await this.applyWorkspaceOps(finalOps, confirmRemoteWorkspaceOps)
-			}
+		// Final workspace_ops (if any)
+		const { operations: finalOps } = parseWorkspaceOps(deferredResp)
+		if (finalOps.length > 0 && applyRemoteWorkspaceOps) {
+			hadWorkspaceOpsForCompile = true
+			await this.applyWorkspaceOps(finalOps, confirmRemoteWorkspaceOps)
+		}
 
-			await this.say(
-				"completion_result",
-				deferredResp.ok ? "Cloud Agent 任务完成。" : "Cloud Agent 任务结束（服务端报告未成功）。",
+		// Compile feedback loop (deferred path): mirrors legacy behaviour.
+		// Runs after all workspace_ops are applied and before the completion message.
+		const compileLoopEnabled = config.get<boolean>("cloudAgent.compileLoop.enabled", true) ?? true
+		const compileMaxRetries = config.get<number>("cloudAgent.compileLoop.maxRetries", 3) ?? 3
+		if (compileLoopEnabled && applyRemoteWorkspaceOps && hadWorkspaceOpsForCompile && !this.abort) {
+			await this.runCompileFeedbackLoop(
+				client,
+				serverUrl,
+				deviceToken,
+				apiKey,
+				requestTimeoutMs,
+				callbacks,
+				compileMaxRetries,
+				confirmRemoteWorkspaceOps,
 			)
 		}
+
+		await this.say(
+			"completion_result",
+			deferredResp.ok ? "Cloud Agent 任务完成。" : "Cloud Agent 任务结束（服务端报告未成功）。",
+		)
 	}
+}
 
 	/**
 	 * Shared helper: apply workspace_ops with optional per-op confirmation UI.

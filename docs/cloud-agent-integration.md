@@ -15,7 +15,7 @@
 | 项目 | 说明 |
 |------|------|
 | 角色 | 扩展作为 **HTTP 客户端**，你们的部署作为 **HTTP 服务端** |
-| 调用顺序（deferred，默认） | `GET /health` → `POST /v1/deferred/start` → 本地执行 tool_calls → `POST /v1/deferred/resume` → 循环至 `status == "done"` |
+| 调用顺序（deferred，默认） | `GET /health` → `POST /v1/deferred/start` → 本地执行 tool_calls → `POST /v1/deferred/resume` → 循环至 `status == "done"` → （可选）`POST /v1/compile` 编译反馈 |
 | 调用顺序（legacy） | `GET /health` → `POST /v1/run` → （可选）`POST /v1/compile` 编译反馈 |
 | Base URL | 用户设置项 `njust-ai-cj.cloudAgent.serverUrl`；扩展会去掉末尾 `/` |
 | 协议切换 | `njust-ai-cj.cloudAgent.deferredProtocol`（默认 **true**）；设为 false 回退到 legacy `/v1/run` |
@@ -215,9 +215,15 @@
 
 ---
 
-## 4b. `POST /v1/compile`（编译反馈闭环，legacy 路径）
+## 4b. `POST /v1/compile`（编译反馈闭环）
 
 当 `njust-ai-cj.cloudAgent.compileLoop.enabled` 为 **true**（默认）时，扩展在 `workspace_ops` 写盘完成后，自动调用此端点在服务器上编译。
+
+**触发路径**：
+- **legacy（`deferredProtocol: false`）**：`POST /v1/run` 返回并应用 `workspace_ops` 之后触发。
+- **deferred（默认，`deferredProtocol: true`）**：整个 deferred 循环（start/resume）结束且 `status == "done"`，并且本轮曾出现被应用的 `workspace_ops` 时触发，在 `completion_result` 之前执行。
+
+两种路径的触发条件相同：`compileLoop.enabled && applyRemoteWorkspaceOps && 曾出现 workspace_ops`。编译失败时的修正仍走 **`POST /v1/run`**；若服务端仅实现了 deferred 而未实现 `/v1/run`，则修正步骤会失败，行为与 legacy 路径相同。
 
 ### 4b.1 请求体（JSON）
 
